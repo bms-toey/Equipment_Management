@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedTrack — ระบบบริหารจัดการเครื่องมือแพทย์</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- ═══════════ LOGIN OVERLAY ═══════════ -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="logo-icon"><svg viewBox="0 0 18 18"><path d="M9 2v4M9 12v4M2 9h4M12 9h4"/><circle cx="9" cy="9" r="2.5"/></svg></div>
+    <div class="login-title">MedTrack</div>
+    <div class="login-sub">เข้าสู่ระบบบริหารจัดการเครื่องมือแพทย์</div>
+    <div class="login-err" id="login-err">ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</div>
+    <div class="form-row" style="text-align:left;gap:16px;margin-bottom:24px">
+      <div class="ff"><label class="flabel">Username</label><input type="text" class="finput" id="login-user" placeholder="username" autocomplete="off" onkeydown="if(event.key==='Enter') doLogin()"></div>
+      <div class="ff"><label class="flabel">Password</label><input type="password" class="finput" id="login-pass" placeholder="password" autocomplete="off" onkeydown="if(event.key==='Enter') doLogin()"></div>
+    </div>
+    <button type="button" class="btn btn-teal" style="width:100%;justify-content:center;padding:10px" onclick="doLogin()">เข้าสู่ระบบ</button>
+    <div style="margin-top:14px;background:rgba(20,184,166,.08);border:1px solid rgba(20,184,166,.2);border-radius:8px;padding:10px 12px;text-align:left">
+      <div style="font-size:10px;font-weight:700;color:var(--teal);letter-spacing:.06em;margin-bottom:6px">DEMO ACCOUNTS</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.8;font-family:var(--mono)">
+        admin / admin1234 &nbsp;<span style="color:var(--text3)">(Admin)</span><br>
+        wichai / 1234 &nbsp;<span style="color:var(--text3)">(ช่างชีวการแพทย์)</span><br>
+        malee / 5678 &nbsp;<span style="color:var(--text3)">(พยาบาล)</span><br>
+        prasong / 9012 &nbsp;<span style="color:var(--text3)">(ผู้บริหาร)</span>
+      </div>
+    </div>
+    <div style="margin-top:12px;font-size:12px">
+      <a href="#" style="color:var(--teal);text-decoration:none;font-weight:600" onclick="popAlert('กำลังจัดทำคู่มือการใช้งาน PDF...')">📖 ดูคู่มือการใช้งานเบื้องต้น</a>
+    </div>
+  </div>
+</div>
+
+<div class="shell" id="app-shell" style="display:none">
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<aside class="sidebar">
+  <div class="logo-area">
+    <div class="logo-wrap">
+      <div class="logo-icon">
+        <svg viewBox="0 0 18 18"><path d="M9 2v4M9 12v4M2 9h4M12 9h4"/><circle cx="9" cy="9" r="2.5"/></svg>
+      </div>
+      <div class="logo-text">
+        <div class="logo-name">MedTrack</div>
+        <div class="logo-sub">รพ.สงขลานครินทร์</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <!-- ภาพรวม -->
+    <div class="nav-section">
+      <div class="nav-section-label">ภาพรวม</div>
+      <div class="ni active" id="nav-dashboard" onclick="goto('dashboard',this)">
+        <svg viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>แดชบอร์ด
+      </div>
+    </div>
+
+    <!-- ทะเบียนสินทรัพย์ -->
+    <div class="nav-section">
+      <div class="nav-section-label">ทะเบียนสินทรัพย์</div>
+      <div class="ni" id="nav-assets" onclick="gotoActiveAssets(this)">
+        <svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7h6M5 10h4"/></svg>รายการอุปกรณ์
+      </div>
+      <div class="ni" id="nav-qms" onclick="goto('qms',this)">
+        <svg viewBox="0 0 16 16"><path d="M3 4h10M3 8h7M3 12h4"/><circle cx="12" cy="11" r="3"/><path d="M14.5 13.5l1.5 1.5"/></svg>ตรวจรับ / QC
+      </div>
+      <div class="ni" id="nav-decommission" onclick="gotoDecommission(this)">
+        <svg viewBox="0 0 16 16"><path d="M2 4h12M5 4V3h6v1M13 4l-1 9H4L3 4"/><path d="M6.5 7v4M9.5 7v4"/></svg>ปลดประจำการ
+      </div>
+    </div>
+
+    <!-- การยืม-คืน -->
+    <div class="nav-section">
+      <div class="nav-section-label">การยืม-คืน</div>
+      <div class="ni" id="nav-loanregistry" onclick="goto('loanregistry',this)">
+        <svg viewBox="0 0 16 16"><path d="M3 8h10M10 5l3 3-3 3"/></svg>ทะเบียนยืม-คืน
+        <span class="nbadge amber" id="nb-loan">4</span>
+      </div>
+    </div>
+
+    <!-- งานบำรุงรักษา -->
+    <div class="nav-section">
+      <div class="nav-section-label">งานบำรุงรักษา</div>
+      <div class="ni" id="nav-pm" onclick="gotoFilteredPM('pm',this)">
+        <svg viewBox="0 0 16 16"><path d="M13.5 3.5L12 2l-1.5 1.5M10.5 3.5l-7 7L2 14l3.5-1.5 7-7"/><circle cx="12.5" cy="3.5" r="1.5"/></svg>บำรุงรักษาเชิงป้องกัน
+        <span class="nbadge amber" id="nb-pm">2</span>
+      </div>
+      <div class="ni" id="nav-cal" onclick="gotoFilteredPM('cal',this)">
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2.5 1.5"/></svg>สอบเทียบเครื่องมือ
+        <span class="nbadge red" id="nb-cal">4</span>
+      </div>
+      <div class="ni" id="nav-repair" onclick="goto('repair',this)">
+        <svg viewBox="0 0 16 16"><path d="M10 2l4 4-8 8H2v-4z"/><path d="M10 6l-4 4"/></svg>ซ่อมบำรุง / CM
+      </div>
+      <div class="ni" id="nav-safety" onclick="goto('safety',this)">
+        <svg viewBox="0 0 16 16"><path d="M8 2l5 2.5v4c0 3-5 5.5-5 5.5S3 11.5 3 8.5v-4L8 2z"/><path d="M6 8l1.5 1.5L10 6"/></svg>ทดสอบความปลอดภัยไฟฟ้า
+        <span class="nbadge amber" id="nb-safety">0</span>
+      </div>
+      <div class="ni" id="nav-spare" onclick="goto('spare',this)">
+        <svg viewBox="0 0 16 16"><path d="M2 4h12v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M8 7v4M6 9h4"/></svg>คลังอะไหล่
+        <span class="nbadge red" id="nb-spare">0</span>
+      </div>
+      <div class="ni" id="nav-contracts" onclick="goto('contracts',this)">
+        <svg viewBox="0 0 16 16"><path d="M3 2h10v12H3z"/><path d="M6 5h4M6 8h4M6 11h2"/><path d="M5 5v0M5 8v0M5 11v0"/></svg>สัญญาบริการ (Contract)
+        <span class="nbadge amber" id="nb-contracts">0</span>
+      </div>
+    </div>
+
+    <!-- คุณภาพ & ความปลอดภัย -->
+    <div class="nav-section">
+      <div class="nav-section-label">คุณภาพ & ความปลอดภัย</div>
+      <div class="ni" id="nav-incident" onclick="goto('incident',this)">
+        <svg viewBox="0 0 16 16"><path d="M8 1L1 14h14L8 1zM8 6v3M8 11v1"/></svg>Incident / CAPA
+      </div>
+      <div class="ni" id="nav-audit" onclick="goto('audit',this)">
+        <svg viewBox="0 0 16 16"><path d="M3 3h10v10H3z"/><path d="M6 7h4M6 10h4M6 4h2"/></svg>Audit Trail
+      </div>
+    </div>
+
+    <!-- รายงาน & วิเคราะห์ -->
+    <div class="nav-section">
+      <div class="nav-section-label">รายงาน & วิเคราะห์</div>
+      <div class="ni" id="nav-reports" onclick="goto('reports',this)">
+        <svg viewBox="0 0 16 16"><path d="M2 12l4-4 3 3 5-6"/><path d="M12 6h2v2"/></svg>รายงาน & KPI
+      </div>
+    </div>
+
+    <!-- จัดการระบบ -->
+    <div class="nav-section">
+      <div class="nav-section-label">จัดการระบบ</div>
+      <div class="ni" id="nav-settings" onclick="goto('settings',this)">
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2M4 4l1.5 1.5M10.5 10.5L12 12M4 12l1.5-1.5M10.5 5.5L12 4"/></svg>ตั้งค่าระบบ
+      </div>
+    </div>
+  </nav>
+
+  <div class="sidebar-bottom">
+    <div class="user-card">
+      <div class="avatar">วช</div>
+      <div style="flex:1">
+        <div class="user-name">วิชัย สุขดี</div>
+        <div class="user-role">ช่างวิศวกรรมชีวการแพทย์</div>
+      </div>
+      <div class="icon-btn" style="width:28px;height:28px;border:none;background:transparent" onclick="doLogout()" title="ออกจากระบบ">
+        <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:var(--text3);stroke-width:2;fill:none;stroke-linecap:round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<div class="main">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="page-title" id="page-title">Dashboard</div>
+      <div class="page-breadcrumb" id="page-breadcrumb">medtrack / overview</div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-search">
+        <div class="search-box">
+          <svg viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3.5 3.5"/></svg>
+          <input type="text" id="global-search" placeholder="ค้นหาอุปกรณ์..." autocomplete="off" oninput="handleSearch(this.value)" onfocus="showSearchResults()" onblur="setTimeout(hideSearchResults,200)">
+        </div>
+        <div class="search-results" id="search-results" style="display:none"></div>
+      </div>
+      <div class="shortcut-hint-btn" onclick="toggleShortcutHelp()" title="Keyboard Shortcuts (?)">?</div>
+      <div class="icon-btn" onclick="openQrScanner()" title="สแกน QR Code">
+        <svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M2 5V2h3M19 2h3v3M2 19v3h3M19 22h3v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <div class="icon-btn" onclick="toggleNotifDrawer()" title="การแจ้งเตือน">
+        <svg viewBox="0 0 16 16"><path d="M8 2a4 4 0 014 4v2.5l1.5 2.5H2.5L4 8.5V6a4 4 0 014-4z"/><path d="M6.5 12a1.5 1.5 0 003 0"/></svg>
+        <div class="pip" id="notif-pip"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CONTENT ═══ -->
+  <div class="content">
+
+  <!-- ─── DASHBOARD ─── -->
+  <div class="page active" id="page-dashboard">
+    <div class="kpi-row">
+      <div class="kpi teal" onclick="goto('assets',document.getElementById('nav-assets'))">
+        <div class="kpi-label">อุปกรณ์ทั้งหมด</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-meta" id="kpi-total-meta">กำลังโหลด...</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="kpi-total-bar" style="background:var(--teal)"></div></div>
+      </div>
+      <div class="kpi amber" onclick="goto('loanregistry',document.getElementById('nav-loanregistry'))">
+        <div class="kpi-label">เกินกำหนดคืน</div>
+        <div class="kpi-value" id="kpi-overdue">—</div>
+        <div class="kpi-meta" id="kpi-overdue-meta">ยืมออกอยู่ทั้งหมด</div>
+        <div class="kpi-bar"><div class="kpi-fill" id="kpi-overdue-bar" style="background:var(--amber)"></div></div>
+      </div>
+      <div class="kpi blue">
+        <div class="kpi-label">PM completion</div>
+        <div class="kpi-value">91.7%</div>
+        <div class="kpi-meta">เป้าหมาย ≥ 90% ✓</div>
+        <div class="kpi-bar"><div class="kpi-fill" style="width:92%;background:var(--blue)"></div></div>
+      </div>
+      <div class="kpi red">
+        <div class="kpi-label">Cal. ใกล้หมดอายุ</div>
+        <div class="kpi-value">3</div>
+        <div class="kpi-meta">ใน 30 วันข้างหน้า</div>
+        <div class="kpi-bar"><div class="kpi-fill" style="width:25%;background:var(--red)"></div></div>
+      </div>
+    </div>
+
+    <div class="g3-1">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="panel">
+          <div class="panel-head">
+            <div><div class="panel-title">ทะเบียนการยืม — รายการล่าสุด</div><div class="panel-subtitle">กดแถวเพื่อดูรายละเอียด / จัดการ</div></div>
+            <button class="btn btn-sm" onclick="goto('loanregistry',document.getElementById('nav-loanregistry'))">ดูทั้งหมด →</button>
+          </div>
+          <div class="panel-body p0">
+            <table class="loan-registry" id="dash-loan-table"><thead><tr><th>รหัส</th><th>อุปกรณ์</th><th>แผนก / ผู้ยืม</th><th>กำหนดคืน</th><th>สถานะ</th></tr></thead><tbody id="dash-loan-tbody"></tbody></table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">สถิติกิจกรรม (รายเดือน)</div></div>
+          <div class="panel-body" style="height:200px;padding:12px 16px"><canvas id="chart-monthly"></canvas></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="panel">
+          <div class="panel-head">
+            <div><div class="panel-title">งานที่ต้องทำ</div><div class="panel-subtitle">คลิกเพื่อเปิดและดำเนินการทันที</div></div>
+            <span class="badge red" id="task-count-badge" style="display:none">0</span>
+          </div>
+          <div id="today-tasks"><div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">กำลังโหลด...</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">การแจ้งเตือน</div><span class="badge red" id="alert-count-badge">5</span></div>
+          <div id="alert-feed"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">สถานะอุปกรณ์</div></div>
+          <div class="panel-body" style="height:170px;padding:12px 16px"><canvas id="chart-status"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">กิจกรรมวันนี้</div></div>
+          <div class="panel-body"><div class="tl" id="activity-feed"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── LOAN REGISTRY ─── -->
+  <div class="page" id="page-loanregistry">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">ทะเบียนการยืม-คืน</div>
+          <div class="panel-subtitle">คลิกแถวเพื่อดูรายละเอียดและจัดการ</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:flex;gap:6px" id="loan-filters">
+            <button class="btn btn-sm active-filter" data-filter="all" onclick="filterLoans('all',this)">ทั้งหมด</button>
+            <button class="btn btn-sm" data-filter="pending" onclick="filterLoans('pending',this)">รอดำเนินการ</button>
+            <button class="btn btn-sm" data-filter="overdue" onclick="filterLoans('overdue',this)">เกินกำหนด</button>
+            <button class="btn btn-sm" data-filter="loaned" onclick="filterLoans('loaned',this)">ยืมออก</button>
+            <button class="btn btn-sm" data-filter="returned" onclick="filterLoans('returned',this)">คืนแล้ว</button>
+          </div>
+          <button class="btn btn-sm" onclick="exportLoansExcel()"><svg viewBox="0 0 16 16"><path d="M14 11v3H2v-3M4 6l4 4 4-4M8 2v8"/></svg> Export</button>
+          <button class="btn btn-teal btn-sm" onclick="goto('newloan')">+ บันทึกยืมใหม่</button>
+        </div>
+      </div>
+      <div class="panel-body p0">
+        <table class="loan-registry">
+          <thead><tr><th>#</th><th>รหัสอุปกรณ์</th><th>ชื่ออุปกรณ์</th><th>ผู้ยืม</th><th>แผนก</th><th>วันยืม</th><th>กำหนดคืน</th><th>Pre-inspect</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody id="loan-registry-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── NEW LOAN (Single Page Form) ─── -->
+  <div class="page" id="page-newloan">
+    <div class="g2" style="align-items:start">
+
+      <!-- LEFT: FORM -->
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">บันทึกยืมอุปกรณ์</div><div class="panel-subtitle">กรอกข้อมูลการยืมให้ครบถ้วนในหน้าเดียว</div></div>
+        </div>
+        <div class="panel-body">
+          <div class="ff" style="margin-bottom:12px">
+            <label class="flabel">1. ค้นหาหรือเลือกอุปกรณ์ <span class="req">*</span></label>
+            <div style="position:relative">
+              <input class="finput" id="device-search" placeholder="พิมพ์ชื่อ หรือรหัส ME-XXXX..." autocomplete="off" oninput="searchDevice(this.value)" onfocus="showDeviceResults()" onblur="setTimeout(hideDeviceResults,200)">
+              <div class="search-results" id="device-results" style="display:none"></div>
+            </div>
+          </div>
+          <div id="selected-device-display" style="display:none;margin-bottom:14px"></div>
+          <div id="device-grid">
+            <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">อุปกรณ์พร้อมให้ยืม</div>
+            <div id="device-cards" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;padding-right:4px"></div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--text3);margin:24px 0 8px;letter-spacing:.05em;text-transform:uppercase">2. ข้อมูลผู้ยืม</div>
+          <div class="form-row col2">
+            <div class="ff">
+              <label class="flabel">ชื่อผู้ยืม <span class="req">*</span></label>
+              <div style="position:relative">
+                <input class="finput" id="f-borrower" placeholder="ชื่อ-นามสกุล" autocomplete="off" oninput="autocompleteBorrower(this.value);validateLoanField(this,'borrower')" onblur="setTimeout(()=>{const r=document.getElementById('borrower-results');if(r)r.style.display='none'},200)">
+                <div class="search-results" id="borrower-results" style="display:none"></div>
+              </div>
+              <div class="field-fb" id="fb-borrower"></div>
+            </div>
+            <div class="ff">
+              <label class="flabel">แผนก <span class="req">*</span></label>
+              <select class="finput" id="f-dept" onchange="validateLoanField(this,'dept')">
+                <option value="">-- เลือกแผนก --</option>
+                <option>ห้องฉุกเฉิน</option><option>ICU</option><option>CCU</option>
+                <option>OPD</option><option>หอผู้ป่วย 3A</option><option>หอผู้ป่วย 4B</option>
+                <option>ห้องผ่าตัด</option><option>NICU</option>
+              </select>
+              <div class="field-fb" id="fb-dept"></div>
+            </div>
+          </div>
+          <div class="form-row col2">
+            <div class="ff">
+              <label class="flabel">วัตถุประสงค์ <span class="req">*</span></label>
+              <select class="finput" id="f-reason" onchange="validateLoanField(this,'reason')">
+                <option value="">-- เลือก --</option>
+                <option>อุปกรณ์หลักของแผนกเสีย</option>
+                <option>ผู้ป่วยฉุกเฉิน</option>
+                <option>อุปกรณ์ไม่เพียงพอ</option>
+                <option>ส่งซ่อมชั่วคราว</option>
+                <option>อื่นๆ</option>
+              </select>
+              <div class="field-fb" id="fb-reason"></div>
+            </div>
+            <div class="ff">
+              <label class="flabel">กำหนดคืน <span class="req">*</span></label>
+              <input class="finput" type="date" id="f-duedate" oninput="validateLoanField(this,'due')">
+              <div class="field-fb" id="fb-due"></div>
+            </div>
+          </div>
+          <div class="sec-toggle" id="sec-toggle-patient" onclick="toggleSection(this)">
+            ข้อมูลผู้ป่วย &amp; หมายเหตุ
+            <span class="sec-toggle-hint">คลิกเพื่อขยาย / ย่อ</span>
+            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+          <div class="sec-body collapsed" id="sec-body-patient">
+            <div style="height:8px"></div>
+            <div class="form-row col3">
+              <div class="ff"><label class="flabel">HN.</label><input class="finput" id="f-hn" placeholder="1234567"></div>
+              <div class="ff"><label class="flabel">สิทธิ์การรักษา</label><select class="finput" id="f-rights"><option value="">-- เลือก --</option><option>บัตรทอง</option><option>ข้าราชการ</option><option>ประกันสังคม</option><option>ชำระเงินเอง</option></select></div>
+              <div class="ff"><label class="flabel">Diagnosis (โรค)</label><input class="finput" id="f-dx" placeholder="ระบุโรค..."></div>
+            </div>
+            <div class="ff" style="margin-bottom:14px">
+              <label class="flabel">หมายเหตุเพิ่มเติม</label>
+              <input class="finput" id="f-note" placeholder="ระบุถ้ามี...">
+            </div>
+          </div>
+          <div class="sticky-foot">
+            <button class="btn" onclick="goto('loanregistry',document.getElementById('nav-loanregistry'))" style="color:var(--text3)">← กลับ</button>
+            <button class="btn btn-teal" id="btn-submit-loan" onclick="submitNewLoan()" disabled style="padding:9px 24px;font-size:13px">✓ ส่งคำขอยืม</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: LIVE PREVIEW -->
+      <div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:0">
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">สรุปรายการยืม (Preview)</div></div>
+          <div class="panel-body" id="loan-preview">
+            <div class="empty"><svg viewBox="0 0 40 40"><path d="M8 12h24M8 20h16M8 28h10"/><rect x="3" y="5" width="34" height="30" rx="4"/></svg><div class="empty-title">ยังไม่มีข้อมูล</div><div class="empty-sub">เริ่มกรอกฟอร์มด้านซ้าย</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ASSETS ─── -->
+  <div class="page" id="page-assets">
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title" id="asset-panel-title">รายการอุปกรณ์ (Active)</div><div class="panel-subtitle" id="asset-count-sub">กำลังโหลด...</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" id="asset-status-filter" onchange="renderAssetsTable()">
+            <option value="">ทุกสถานะ</option>
+          </select>
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" id="asset-dept-filter" onchange="renderAssetsTable()">
+            <option value="">ทุกแผนก</option>
+          </select>
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" id="asset-category-filter" onchange="renderAssetsTable()">
+            <option value="">ทุกชนิดครุภัณฑ์</option>
+          </select>
+          <button class="btn btn-sm" onclick="exportAssetsExcel()"><svg viewBox="0 0 16 16"><path d="M14 11v3H2v-3M4 6l4 4 4-4M8 2v8"/></svg> Export</button>
+          <button class="btn btn-teal btn-sm" id="asset-add-btn" onclick="openAddDeviceModal()">+ เพิ่มอุปกรณ์</button>
+        </div>
+      </div>
+      <div class="panel-body p0">
+        <table class="tbl" id="asset-table"><thead><tr><th>รหัส / บาร์โค้ด</th><th>ชื่อ / ชนิดอุปกรณ์</th><th>ยี่ห้อ / รุ่น</th><th>หน่วยงาน</th><th>อายุเครื่อง</th><th>สถานะ</th><th>PM / Cal.</th><th style="width:80px"></th></tr></thead><tbody id="asset-tbody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── PM ─── -->
+  <div class="page" id="page-pm">
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title" id="pm-panel-title">แผนบำรุงรักษาเชิงป้องกัน (Preventive Maintenance)</div><div class="panel-subtitle" id="pm-panel-subtitle">จัดการแผนงาน PM ประจำปีและบันทึกผลการตรวจสอบ</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm active-filter" id="pm-view-list" onclick="togglePMView('list')">List View</button>
+            <button class="btn btn-sm" id="pm-view-cal" onclick="togglePMView('cal')">Calendar View</button>
+          </div>
+          <button class="btn btn-sm" onclick="openAnnualPMModal()"><svg viewBox="0 0 16 16"><path d="M2 4h12v9H2z"/><path d="M5 2v4M11 2v4M2 8h12"/></svg> สร้างแผนประจำปี</button>
+          <button class="btn btn-sm" onclick="exportPMExcel()"><svg viewBox="0 0 16 16"><path d="M14 11v3H2v-3M4 6l4 4 4-4M8 2v8"/></svg> Export</button>
+          <button class="btn btn-teal btn-sm" onclick="openPMCreateDrawer()">+ สร้างแผนงาน</button>
+        </div>
+      </div>
+      <div class="panel-body p0" id="pm-view-list-container">
+        <table class="tbl"><thead><tr><th>WO#</th><th>อุปกรณ์</th><th>ประเภท</th><th>กำหนด</th><th>ผู้รับผิดชอบ</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody id="pm-tbody"></tbody></table>
+      </div>
+      <div class="panel-body p0" id="pm-view-cal-container" style="display:none;background:var(--surface2)">
+        <!-- Calendar is rendered here via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── REPAIR ─── -->
+  <div class="page" id="page-repair">
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title">แจ้งซ่อม (Corrective Maintenance)</div><div class="panel-subtitle">ติดตามสถานะงานซ่อม และ SLA</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" id="repair-status-filter" onchange="renderRepairTable()"><option value="">ทุกสถานะ</option><option>กำลังซ่อม</option><option>ส่งซ่อมภายนอก</option><option>รออะไหล่</option><option>ซ่อมเสร็จ</option></select>
+          <button class="btn btn-sm" onclick="exportRepairsExcel()"><svg viewBox="0 0 16 16"><path d="M14 11v3H2v-3M4 6l4 4 4-4M8 2v8"/></svg> Export</button>
+          <button class="btn btn-teal btn-sm" onclick="openRepairDrawer()">+ แจ้งซ่อมออนไลน์</button>
+        </div>
+      </div>
+      <div class="panel-body p0">
+        <table class="tbl"><thead><tr><th>ใบแจ้งซ่อม</th><th>อุปกรณ์ / อาการ</th><th>ผู้แจ้ง / วันแจ้ง</th><th>ช่างรับผิดชอบ</th><th>ประเภทงาน</th><th>สถานะ</th></tr></thead>
+        <tbody id="repair-tbody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── SAFETY TEST ─── -->
+  <div class="page" id="page-safety">
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title">ทดสอบความปลอดภัยไฟฟ้า (Electrical Safety Test)</div><div class="panel-subtitle">IEC 62353 — Earth Resistance · Equipment Leakage · Patient Leakage</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" id="safety-filter" onchange="renderSafetyTable()"><option value="">ทุกผล</option><option value="ผ่าน (Pass)">ผ่าน (Pass)</option><option value="ไม่ผ่าน (Fail)">ไม่ผ่าน (Fail)</option></select>
+          <button class="btn btn-teal btn-sm" onclick="openSafetyDrawer()">+ บันทึกผลทดสอบใหม่</button>
+        </div>
+      </div>
+      <div class="panel-body p0">
+        <table class="tbl"><thead><tr><th>รหัสทดสอบ</th><th>อุปกรณ์</th><th>วันที่ทดสอบ</th><th>Class / Type</th><th>Earth Res (Ω)</th><th>Equip Leak (μA)</th><th>Patient Leak (μA)</th><th>ผลรวม</th><th>ผู้ทดสอบ</th></tr></thead>
+        <tbody id="safety-tbody"></tbody></table>
+      </div>
+    </div>
+    <div id="safety-kpi-row" class="kpi-row" style="margin-top:0"></div>
+  </div>
+
+  <!-- ─── SPARE PARTS ─── -->
+  <div class="page" id="page-spare">
+    <div class="kpi-row" id="spare-kpi-row"></div>
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title">คลังอะไหล่และสิ้นเปลือง (Spare Parts Inventory)</div><div class="panel-subtitle">ISO 13485 §7.4 — ติดตาม Stock อะไหล่ที่ใช้ในงานซ่อมบำรุง</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" id="spare-cat-filter" onchange="renderSpareTable()"><option value="">ทุกประเภท</option><option>Sensor/Probe</option><option>Accessory</option><option>Consumable</option><option>Cable/Lead</option><option>Patient Circuit</option><option>Electrode</option><option>Electronic</option></select>
+          <button class="btn btn-sm" id="spare-low-btn" onclick="filterLowStock()" style="display:none"><span class="badge red" id="nb-spare-low">0</span> Low Stock</button>
+          <button class="btn btn-teal btn-sm" onclick="openSpareDrawer()">+ เพิ่มรายการอะไหล่</button>
+        </div>
+      </div>
+      <div class="panel-body p0">
+        <table class="tbl"><thead><tr><th>รหัส</th><th>ชื่ออะไหล่ / Part No.</th><th>ประเภท</th><th>คงเหลือ</th><th>Min Stock</th><th>ราคา/หน่วย</th><th>ที่เก็บ</th><th>อุปกรณ์ที่ใช้</th><th></th></tr></thead>
+        <tbody id="spare-tbody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── SERVICE CONTRACTS ─── -->
+  <div class="page" id="page-contracts">
+    <div class="kpi-row" id="contracts-kpi-row"></div>
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title">สัญญาบริการและบำรุงรักษา (Service Contract)</div><div class="panel-subtitle">ISO 13485 §7.4 — Supplier Control · ติดตามสัญญา SLA และประสิทธิภาพ Vendor</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" id="contract-status-filter" onchange="renderContractsTable()">
+            <option value="">ทุกสถานะ</option>
+            <option value="Active">Active</option>
+            <option value="Expiring">ใกล้หมด (≤60 วัน)</option>
+            <option value="Expired">หมดอายุ</option>
+          </select>
+          <button class="btn btn-teal btn-sm" onclick="openContractDrawer()">+ เพิ่มสัญญา</button>
+        </div>
+      </div>
+      <div class="panel-body p0">
+        <table class="tbl" id="contracts-table">
+          <thead><tr><th>รหัส</th><th>ชื่อสัญญา / Vendor</th><th>ประเภท</th><th>อุปกรณ์ที่ครอบคลุม</th><th>ระยะสัญญา</th><th>มูลค่า (บาท)</th><th>SLA Response</th><th>SLA Uptime</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody id="contracts-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SLA Performance Panel -->
+    <div class="panel" id="contracts-sla-panel" style="display:none">
+      <div class="panel-head"><div class="panel-title" id="contracts-sla-title">SLA Performance</div></div>
+      <div class="panel-body" id="contracts-sla-body"></div>
+    </div>
+  </div>
+
+  <!-- ─── AUDIT ─── -->
+  <div class="page" id="page-audit">
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title">Audit Trail — บันทึกทุก transaction</div><div class="panel-subtitle">Immutable log · ไม่สามารถแก้ไขหรือลบได้</div></div>
+        <div style="display:flex;gap:8px">
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" onchange="filterAuditLog(this.value)">
+            <option value="">ทุกประเภท</option>
+            <option value="LOAN">ยืม-คืน</option>
+            <option value="INSPECT">ตรวจสอบ</option>
+            <option value="PM">PM</option>
+            <option value="CAL">Cal.</option>
+            <option value="INC">Incident</option>
+          </select>
+          <button class="btn btn-sm" onclick="toast('Export CSV สำเร็จ','teal')">Export CSV</button>
+        </div>
+      </div>
+      <div class="panel-body p0" id="audit-body"></div>
+    </div>
+  </div>
+
+  <!-- ─── REPORTS ─── -->
+  <div class="page" id="page-reports">
+    <div class="kpi-row" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi teal"><div class="kpi-label">Uptime เฉลี่ย</div><div class="kpi-value">96.2%</div><div class="kpi-meta">เป้า ≥ 95% ✓</div><div class="kpi-bar"><div class="kpi-fill" style="width:96%;background:var(--teal)"></div></div></div>
+      <div class="kpi amber"><div class="kpi-label">คืนตรงเวลา</div><div class="kpi-value">87%</div><div class="kpi-meta">เป้า ≥ 95% ✗</div><div class="kpi-bar"><div class="kpi-fill" style="width:87%;background:var(--amber)"></div></div></div>
+      <div class="kpi blue"><div class="kpi-label">MTTR เฉลี่ย</div><div class="kpi-value">31 ชม.</div><div class="kpi-meta">เป้า ≤ 48 ชม. ✓</div><div class="kpi-bar"><div class="kpi-fill" style="width:65%;background:var(--blue)"></div></div></div>
+      <div class="kpi red"><div class="kpi-label">Cal. compliance</div><div class="kpi-value">94.2%</div><div class="kpi-meta">เป้า 100%</div><div class="kpi-bar"><div class="kpi-fill" style="width:94%;background:var(--red)"></div></div></div>
+    </div>
+    <div class="g2">
+      <div class="panel"><div class="panel-head"><div class="panel-title">แนวโน้ม PM & Cal. compliance (6 เดือน)</div></div><div class="panel-body" style="height:220px"><canvas id="chart-trend"></canvas></div></div>
+      <div class="panel"><div class="panel-head"><div class="panel-title">สาเหตุการซ่อม (Pareto)</div></div><div class="panel-body" style="height:220px"><canvas id="chart-pareto"></canvas></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">สถิติรายเดือน — เมษายน 2567</div></div>
+      <div class="panel-body">
+        <div class="stat-row"><div class="stat-label">PM completion rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:92%;background:var(--teal)"></div></div><div class="stat-value">91.7%</div></div>
+        <div class="stat-row"><div class="stat-label">Loan on-time rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:87%;background:var(--amber)"></div></div><div class="stat-value">87%</div></div>
+        <div class="stat-row"><div class="stat-label">Cal. valid rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:94%;background:var(--blue)"></div></div><div class="stat-value">94.2%</div></div>
+        <div class="stat-row"><div class="stat-label">Electrical safety pass rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:100%;background:var(--green)"></div></div><div class="stat-value">100%</div></div>
+        <div class="stat-row"><div class="stat-label">Damage during loan</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:4%;background:var(--red)"></div></div><div class="stat-value">1 รายการ</div></div>
+        <div class="stat-row"><div class="stat-label">อายุการใช้งานเฉลี่ย (Lifespan)</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:60%;background:var(--blue)"></div></div><div class="stat-value">4.2 ปี</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── INCIDENT & CAPA ─── -->
+  <div class="page" id="page-incident">
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title">ระบบจัดการอุบัติการณ์ความเสี่ยง (Incident & CAPA)</div><div class="panel-subtitle">รายงานเหตุการณ์ไม่พึงประสงค์ และวิเคราะห์หาสาเหตุรากเหง้า (Root Cause Analysis)</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="finput" style="font-size:12px;padding:6px 10px;width:auto" id="inc-status-filter" onchange="renderIncidentTable()"><option value="">ทุกสถานะ</option><option>รอดำเนินการ</option><option>กำลังสืบสวน (Investigation)</option><option>ปิดแล้ว (Closed)</option></select>
+          <button class="btn btn-red btn-sm" onclick="openIncidentCreateDrawer()">+ รายงานอุบัติการณ์</button>
+        </div>
+      </div>
+      <div class="panel-body p0">
+        <table class="tbl"><thead><tr><th>INC# / วันที่เกิดเหตุ</th><th>อุปกรณ์ที่เกี่ยวข้อง</th><th>รายละเอียดเหตุการณ์</th><th>ระดับความรุนแรง (Severity)</th><th>สถานะ CAPA</th></tr></thead>
+        <tbody id="incident-tbody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── QMS & SOP ─── -->
+  <div class="page" id="page-qms">
+    <div class="g2" style="align-items:start">
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">SOP & Document Control (ISO 13485)</div><div class="panel-subtitle">ควบคุมเอกสารและเวอร์ชันล่าสุด</div></div>
+          <button class="btn btn-teal btn-sm" onclick="openAddQMSDrawer()">+ เพิ่มเอกสาร</button>
+        </div>
+        <div class="panel-body p0">
+          <table class="tbl"><thead><tr><th>เอกสารอ้างอิง</th><th>Rev.</th><th>วันบังคับใช้</th><th>สถานะ</th><th style="width:60px"></th></tr></thead>
+          <tbody id="qms-docs-tbody"></tbody></table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">Training Records (Competency)</div><div class="panel-subtitle">บันทึกการฝึกอบรมบุคลากรที่เกี่ยวข้อง</div></div>
+          <button class="btn btn-teal btn-sm" onclick="openAddTrainingDrawer()">+ บันทึกอบรม</button>
+        </div>
+        <div class="panel-body p0">
+          <table class="tbl"><thead><tr><th>บุคลากร</th><th>หลักสูตร</th><th>วันที่อบรม</th><th>ผลการประเมิน</th><th style="width:60px"></th></tr></thead>
+          <tbody id="qms-training-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── SETTINGS ─── -->
+  <div class="page" id="page-settings">
+    <div style="margin-bottom:12px;font-size:13px;color:var(--text2)">จัดการข้อมูลพื้นฐาน (Master Data) สำหรับตัวเลือกในระบบ สามารถเพิ่ม/ลบได้ตามสิทธิ์การใช้งาน</div>
+    <div id="settings-container"></div>
+  </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /shell -->
+
+<!-- ═══════════ DRAWERS ═══════════ -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer()"></div>
+
+<!-- Loan Detail Drawer -->
+<div class="drawer" id="drawer-loan">
+  <div class="drawer-head">
+    <div><div class="drawer-title" id="drawer-loan-title">รายละเอียดการยืม</div><div class="drawer-sub" id="drawer-loan-sub"></div></div>
+    <div class="drawer-close" onclick="closeDrawer()">×</div>
+  </div>
+  <div class="drawer-body" id="drawer-loan-body"></div>
+  <div class="drawer-foot" id="drawer-loan-foot"></div>
+</div>
+
+<!-- Asset Detail Drawer -->
+<div class="drawer" id="drawer-asset">
+  <div class="drawer-head">
+    <div><div class="drawer-title" id="drawer-asset-title">รายละเอียดอุปกรณ์</div><div class="drawer-sub" id="drawer-asset-sub"></div></div>
+    <div class="drawer-close" onclick="closeDrawer()">×</div>
+  </div>
+  <div class="drawer-body" id="drawer-asset-body"></div>
+  <div class="drawer-foot" id="drawer-asset-foot"></div>
+</div>
+
+<!-- Notification Drawer -->
+<div class="drawer" id="drawer-notif">
+  <div class="drawer-head"><div><div class="drawer-title">การแจ้งเตือน</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body" style="padding:0" id="drawer-notif-body"></div>
+</div>
+
+<!-- Add Device Modal -->
+<div class="modal-overlay" id="modal-add-device" onclick="if(event.target===this) closeAddDeviceModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="modal-device-title">เพิ่มอุปกรณ์ใหม่</div>
+        <div class="modal-sub" id="modal-device-sub">กรอกข้อมูลและขึ้นทะเบียนในระบบ</div>
+      </div>
+      <div class="modal-close" onclick="closeAddDeviceModal()">×</div>
+    </div>
+    <div class="modal-body">
+      <div class="tabs-nav">
+        <div class="tab-btn active" onclick="switchAddDeviceTab(1)" id="add-tab-btn-1">1. ข้อมูลทั่วไป</div>
+        <div class="tab-btn" onclick="switchAddDeviceTab(2)" id="add-tab-btn-2">2. จัดซื้อ & องค์กร</div>
+        <div class="tab-btn" onclick="switchAddDeviceTab(3)" id="add-tab-btn-3">3. บำรุงรักษา & ไฟล์แนบ</div>
+      </div>
+      
+      <div class="tab-pane active" id="add-tab-1">
+        <div class="form-row col2">
+          <div class="ff span2"><label class="flabel">ชื่ออุปกรณ์ / เครื่องมือแพทย์ <span class="req">*</span></label><input class="finput" id="add-name" placeholder="ระบุชื่ออุปกรณ์"></div>
+          <div class="ff"><label class="flabel">รหัสครุภัณฑ์ / รหัสเครื่อง <span class="req">*</span></label>
+            <div style="display:flex;gap:6px">
+              <input class="finput" id="add-id" placeholder="ME-XXXX">
+              <button class="btn btn-sm" onclick="document.getElementById('add-id').value='ME-'+Math.floor(Math.random()*90000+10000)" title="สร้างอัตโนมัติ"><svg viewBox="0 0 16 16"><path d="M2 8a6 6 0 1111.5 2M13 5v5h-5"/></svg></button>
+            </div>
+          </div>
+          <div class="ff"><label class="flabel">เลขทะเบียน อย. (Thai FDA No.) <span class="req">*</span></label><input class="finput" id="add-fda" placeholder="เช่น 65-2-2-2-XXXXXXX"></div>
+          <div class="ff"><label class="flabel">ชนิดครุภัณฑ์ (Category)</label><select class="finput" id="add-category"></select></div>
+          <div class="ff"><label class="flabel">รหัส สนย.</label><select class="finput" id="add-sny"></select></div>
+          <div class="ff"><label class="flabel">ยี่ห้อ (Brand)</label><select class="finput" id="add-brand"></select></div>
+          <div class="ff"><label class="flabel">รุ่น (Model)</label><input class="finput" id="add-model" placeholder="ระบุรุ่น"></div>
+          <div class="ff span2"><label class="flabel">Serial Number</label><input class="finput" id="add-serial" placeholder="SN"></div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="add-tab-2">
+        <div class="form-row col2">
+          <div class="ff"><label class="flabel">หน่วยงาน / แผนก</label><select class="finput" id="add-dept"></select></div>
+          <div class="ff"><label class="flabel">ระดับความเสี่ยง</label><select class="finput" id="add-risk"></select></div>
+          <div class="ff"><label class="flabel">วันจัดซื้อ</label><input class="finput" type="date" id="add-date"></div>
+          <div class="ff"><label class="flabel">อายุการใช้งาน (ปี)</label><input class="finput" type="number" id="add-depyears" value="5"></div>
+          <div class="ff"><label class="flabel">ที่มาการจัดซื้อ</label><select class="finput" id="add-procurement"></select></div>
+          <div class="ff"><label class="flabel">บริษัทผู้จัดจำหน่าย</label><select class="finput" id="add-vendor"></select></div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="add-tab-3">
+        <div class="form-row col2">
+          <div class="ff"><label class="flabel">ความถี่ PM (IPM) - รอบเดือน</label><input class="finput" type="number" id="add-pm-freq" placeholder="เช่น 6"></div>
+          <div class="ff"><label class="flabel">ความถี่ Calibrate (CAL) - รอบเดือน</label><input class="finput" type="number" id="add-cal-freq" placeholder="เช่น 12"></div>
+          <div class="ff span2"><label class="flabel">ส่วนควบ (Accessories)</label><input class="finput" id="add-accessories" placeholder="คั่นด้วยลูกน้ำ (,) เช่น สาย Sensor, Battery"></div>
+          <div class="ff span2"><label class="flabel">ความถี่ในการเปลี่ยนอะไหล่ (Parts)</label><input class="finput" id="add-parts-freq" placeholder="เช่น เปลี่ยนแบตเตอรี่ทุก 2 ปี"></div>
+          <div class="ff span2">
+            <label class="flabel">รูปภาพอุปกรณ์ (Device Image)</label>
+            <input class="finput" type="file" accept="image/*" id="add-image">
+          </div>
+          <div class="ff span2"><label class="flabel">แนบไฟล์เอกสารสำคัญ (PDF, คู่มือ, Certificate)</label><input class="finput" type="file" multiple id="add-docs"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeAddDeviceModal()">ยกเลิก</button>
+      <button class="btn btn-teal" id="btn-submit-device" onclick="submitDevice()">✓ บันทึกและขึ้นทะเบียน</button>
+    </div>
+  </div>
+</div>
+
+<!-- Vendor Modal -->
+<div class="modal-overlay" id="modal-vendor" onclick="if(event.target===this) closeVendorModal()">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-head">
+      <div><div class="modal-title" id="vendor-modal-title">เพิ่มบริษัทผู้จัดจำหน่าย</div></div>
+      <div class="modal-close" onclick="closeVendorModal()">×</div>
+    </div>
+    <div class="modal-body" style="padding-top:16px">
+      <div class="form-row col2">
+        <div class="ff span2"><label class="flabel">ชื่อบริษัท <span class="req">*</span></label><input class="finput" id="v-name" placeholder="ระบุชื่อบริษัท"></div>
+        <div class="ff span2"><label class="flabel">เลขประจำตัวผู้เสียภาษี 13 หลัก</label><input class="finput" id="v-tax" placeholder="เช่น 0105556667778"></div>
+        <div class="ff span2"><label class="flabel">ที่อยู่</label><textarea class="finput" id="v-address" rows="2" placeholder="ระบุที่อยู่ตั้งทำการ..."></textarea></div>
+        <div class="ff"><label class="flabel">เบอร์โทรศัพท์</label><input class="finput" id="v-tel" placeholder="ระบุเบอร์ติดต่อ"></div>
+        <div class="ff"><label class="flabel">ชื่อผู้ติดต่อ (Contact Person)</label><input class="finput" id="v-contact" placeholder="ระบุชื่อผู้ประสานงาน"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeVendorModal()">ยกเลิก</button>
+      <button class="btn btn-teal" onclick="submitVendor()">✓ บันทึกข้อมูล</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit User Modal -->
+<div class="modal-overlay" id="modal-add-user" onclick="if(event.target===this) closeAddUserModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="user-modal-title">เพิ่มผู้ใช้งานใหม่</div>
+        <div class="modal-sub" id="user-modal-sub">กำหนดบัญชีและสิทธิ์การเข้าถึง</div>
+      </div>
+      <div class="modal-close" onclick="closeAddUserModal()">×</div>
+    </div>
+    <div class="modal-body" style="padding-top:16px">
+      <input type="hidden" id="nu-id">
+      <div class="form-row col2">
+        <div class="ff">
+          <label class="flabel">Username <span class="req" id="nu-uname-req">*</span></label>
+          <input class="finput" id="nu-uname" placeholder="ตัวพิมพ์เล็ก ไม่มีช่องว่าง" autocomplete="off">
+        </div>
+        <div class="ff"><label class="flabel">ชื่อ-นามสกุล <span class="req">*</span></label><input class="finput" id="nu-name" placeholder="ชื่อจริง"></div>
+        <div class="ff">
+          <label class="flabel" id="nu-pass-label">รหัสผ่าน <span class="req">*</span></label>
+          <input class="finput" type="password" id="nu-pass" placeholder="อย่างน้อย 4 ตัวอักษร" autocomplete="new-password">
+        </div>
+        <div class="ff">
+          <label class="flabel" id="nu-pin-label">PIN 4 หลัก <span class="req">*</span></label>
+          <input class="finput" type="password" id="nu-pin" maxlength="4" placeholder="0000" autocomplete="new-password">
+        </div>
+        <div class="ff"><label class="flabel">บทบาท (Role)</label>
+          <select class="finput" id="nu-role">
+            <option value="bmed">ช่างชีวการแพทย์ (BMED)</option>
+            <option value="nurse">พยาบาล (Nurse)</option>
+            <option value="manager">ผู้บริหาร (Manager)</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="ff"><label class="flabel">แผนก / หน่วยงาน</label><input class="finput" id="nu-dept" placeholder="ชื่อแผนก"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeAddUserModal()">ยกเลิก</button>
+      <button class="btn btn-teal" id="user-modal-save-btn" onclick="saveUserModal()">✓ บันทึกผู้ใช้</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR Scanner Modal -->
+<div class="modal-overlay" id="modal-qr-scanner" onclick="if(event.target===this) closeQrScanner()">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-head">
+      <div><div class="modal-title">สแกน QR Code</div><div class="modal-sub">นำกล้องสแกนที่ใบงานเพื่อจัดการยืม-คืน</div></div>
+      <div class="modal-close" onclick="closeQrScanner()">×</div>
+    </div>
+    <div class="modal-body" style="padding-top:16px;text-align:center">
+      <div id="qr-reader" style="width:100%; border-radius:12px; overflow:hidden; border:1px solid var(--border) !important"></div>
+    </div>
+    <div class="modal-foot" style="justify-content:center"><button class="btn" onclick="closeQrScanner()">ยกเลิกการสแกน</button></div>
+  </div>
+</div>
+
+<!-- Decommission Modal -->
+<div class="modal-overlay" id="modal-decommission" onclick="if(event.target===this) closeDecommModal()">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">ปลดประจำการ / แทงจำหน่าย</div>
+        <div class="modal-sub" id="decomm-modal-sub">กรอกข้อมูลให้ครบถ้วนตามระเบียบพัสดุฯ</div>
+      </div>
+      <div class="modal-close" onclick="closeDecommModal()">×</div>
+    </div>
+    <div class="modal-body" style="padding-top:16px">
+      <!-- แถบแจ้งเตือน -->
+      <div style="background:var(--red-l);border:1px solid #fca5a5;border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--red);display:flex;gap:8px;align-items:flex-start">
+        <svg viewBox="0 0 16 16" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;flex-shrink:0;margin-top:1px"><path d="M8 1L1 14h14L8 1zM8 6v3M8 11v1"/></svg>
+        <span>การปลดประจำการเป็นการดำเนินการถาวร ไม่สามารถย้อนกลับได้ กรุณาตรวจสอบข้อมูลให้ถูกต้อง</span>
+      </div>
+
+      <div class="form-row col2">
+        <!-- เหตุผล -->
+        <div class="ff span2">
+          <label class="flabel">เหตุผลการปลดประจำการ <span class="req">*</span></label>
+          <select class="finput" id="decomm-reason-type" onchange="toggleDecommReasonOther()">
+            <option value="">-- เลือกเหตุผล --</option>
+            <option value="หมดอายุค่าเสื่อมราคา">หมดอายุค่าเสื่อมราคาตามระเบียบ</option>
+            <option value="ซ่อมไม่คุ้มค่า">ซ่อมไม่คุ้มค่า (Beyond Economic Repair)</option>
+            <option value="ล้าสมัย เทคโนโลยีไม่รองรับ">ล้าสมัย / เทคโนโลยีไม่รองรับ (Obsolete)</option>
+            <option value="สูญหาย">สูญหาย (Lost)</option>
+            <option value="ชำรุดเสียหายถาวร">ชำรุดเสียหายถาวร ไม่สามารถซ่อมได้</option>
+            <option value="อื่นๆ">อื่นๆ (โปรดระบุ)</option>
+          </select>
+        </div>
+        <div class="ff span2" id="decomm-reason-other-wrap" style="display:none">
+          <label class="flabel">ระบุเหตุผลเพิ่มเติม</label>
+          <textarea class="finput" id="decomm-reason-other" rows="2" placeholder="อธิบายเหตุผลโดยละเอียด..."></textarea>
+        </div>
+
+        <!-- วิธีการจำหน่าย -->
+        <div class="ff span2">
+          <label class="flabel">วิธีการจำหน่าย <span class="req">*</span></label>
+          <select class="finput" id="decomm-method">
+            <option value="">-- เลือกวิธีการจำหน่าย --</option>
+            <option value="ขายทอดตลาด">ขายทอดตลาด (Public Auction)</option>
+            <option value="โอนย้ายให้หน่วยงานอื่น">โอนย้ายให้หน่วยงานอื่นในองค์กร</option>
+            <option value="บริจาคให้หน่วยงานภายนอก">บริจาคให้หน่วยงานภายนอก / โรงพยาบาลอื่น</option>
+            <option value="ส่งคืนผู้ผลิตหรือตัวแทนจำหน่าย">ส่งคืนผู้ผลิต / ตัวแทนจำหน่าย</option>
+            <option value="แลกเปลี่ยน Trade-in">แลกเปลี่ยน (Trade-in) กับอุปกรณ์ใหม่</option>
+            <option value="ทำลายทิ้ง">ทำลายทิ้ง (Disposal/Destruction)</option>
+            <option value="ตัดบัญชีสูญหาย">ตัดบัญชีสูญหาย (Write-off)</option>
+          </select>
+        </div>
+
+        <!-- วันที่และเอกสาร -->
+        <div class="ff">
+          <label class="flabel">วันที่ปลดประจำการ <span class="req">*</span></label>
+          <input type="date" class="finput" id="decomm-date">
+        </div>
+        <div class="ff">
+          <label class="flabel">เลขที่คำสั่ง / เอกสารอ้างอิง</label>
+          <input type="text" class="finput" id="decomm-docref" placeholder="เช่น คส.รพ.สข./2567/001">
+        </div>
+
+        <!-- ผู้อนุมัติและมูลค่าซาก -->
+        <div class="ff">
+          <label class="flabel">ผู้อนุมัติ / ผู้มีอำนาจลงนาม <span class="req">*</span></label>
+          <input type="text" class="finput" id="decomm-approver" placeholder="ชื่อ-สกุล และตำแหน่ง">
+        </div>
+        <div class="ff">
+          <label class="flabel">มูลค่าซาก / ราคาที่ขายได้ (บาท)</label>
+          <input type="number" class="finput" id="decomm-salvage" placeholder="0" min="0">
+        </div>
+
+        <!-- หมายเหตุ -->
+        <div class="ff span2">
+          <label class="flabel">หมายเหตุเพิ่มเติม</label>
+          <textarea class="finput" id="decomm-note" rows="2" placeholder="ข้อมูลเพิ่มเติม เช่น สถานที่เก็บซาก หมายเลข lot ใบเสร็จ..."></textarea>
+        </div>
+
+        <!-- e-Signature -->
+        <div class="ff span2" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+          <label class="flabel">PIN ยืนยันตัวตน (e-Signature) <span class="req">*</span></label>
+          <input type="password" class="finput" id="decomm-pin" placeholder="กรอก PIN 4 หลักเพื่อลงนามอนุมัติ" maxlength="8" style="letter-spacing:4px">
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeDecommModal()">ยกเลิก</button>
+      <button class="btn btn-red" onclick="submitDecommission()" style="gap:6px">
+        <svg viewBox="0 0 16 16" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round"><path d="M2 4h12M5 4V3h6v1M13 4l-1 9H4L3 4"/></svg>
+        ยืนยันปลดประจำการ
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Repair Drawer -->
+<div class="drawer" id="drawer-repair">
+  <div class="drawer-head"><div><div class="drawer-title">แจ้งซ่อมใหม่</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">เลขที่ใบแจ้งซ่อม <span class="req">*</span></label>
+        <div style="display:flex;gap:6px">
+          <input class="finput" id="repair-cmid" placeholder="CM-XXXX" disabled>
+          <button class="btn btn-sm" onclick="document.getElementById('repair-cmid').value='CM-'+Math.floor(Math.random()*9000+1000)" title="สร้างอัตโนมัติ"><svg viewBox="0 0 16 16"><path d="M2 8a6 6 0 1111.5 2M13 5v5h-5"/></svg></button>
+        </div>
+      </div>
+      <div class="ff"><label class="flabel">สถานที่ซ่อม / ส่งเครื่อง</label><select class="finput" id="repair-location"><option>นำเครื่องมาส่งที่ศูนย์ฯ</option><option>ให้ช่างไปดำเนินการซ่อมที่หน้างาน</option></select></div>
+      <div class="ff span2"><label class="flabel">อุปกรณ์ <span class="req">*</span></label><select class="finput" id="repair-device"><option value="">-- เลือก --</option></select></div>
+      <div class="ff"><label class="flabel">แผนกผู้แจ้ง</label><select class="finput" id="repair-dept"></select></div>
+      <div class="ff"><label class="flabel">ความเร่งด่วน</label><select class="finput" id="repair-urgency"><option>Critical</option><option>ปกติ</option></select></div>
+      <div class="ff span2"><label class="flabel">อาการเสีย <span class="req">*</span></label><textarea class="finput" rows="4" id="repair-symptom" placeholder="อธิบายอาการที่พบ..."></textarea></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="submitRepair()">แจ้งซ่อม</button>
+  </div>
+</div>
+
+<!-- Manage Repair Drawer -->
+<div class="drawer" id="drawer-repair-manage">
+  <div class="drawer-head"><div><div class="drawer-title" id="drm-title">จัดการงานซ่อม CM-XXXX</div><div class="drawer-sub" id="drm-sub"></div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">การมอบหมายงาน (โอนงาน)</div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">ช่างผู้รับผิดชอบ</label><select class="finput" id="drm-tech"></select></div>
+      <div class="ff"><label class="flabel">สถานะงานซ่อม</label><select class="finput" id="drm-status"><option>รอรับงาน</option><option>กำลังซ่อม</option><option>รออะไหล่</option><option>ส่งซ่อมภายนอก</option><option>ซ่อมเสร็จ</option></select></div>
+    </div>
+    
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">บันทึกผลการซ่อมบำรุง</div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">สาเหตุการชำรุด</label><select class="finput" id="drm-cause"></select></div>
+      <div class="ff"><label class="flabel">รายการอะไหล่ที่ใช้ (หักจากคลัง)</label><input class="finput" id="drm-parts" placeholder="เช่น Board x1, Sensor x1"></div>
+      <div class="ff"><label class="flabel">ความก้าวหน้าการซ่อม</label><input class="finput" id="drm-progress" placeholder="ระบุความคืบหน้าล่าสุด..."></div>
+      <div class="ff"><label class="flabel">ค่าใช้จ่ายการซ่อม (บาท)</label><input class="finput" type="number" id="drm-cost" placeholder="0"></div>
+      <div class="ff span2"><label class="flabel">การยกระดับปัญหา (Escalation Path)</label><select class="finput" id="drm-escalation"><option value="">-- ไม่มีการยกระดับ --</option><option value="แจ้งหัวหน้าแผนก (Head of Dept.)">แจ้งหัวหน้าแผนก (Head of Dept.)</option><option value="แจ้งผู้ผลิต/ตัวแทนจำหน่าย (Vendor)">แจ้งผู้ผลิต/ตัวแทนจำหน่าย (Vendor)</option><option value="รายงานผู้อำนวยการ (Director Level)">รายงานผู้อำนวยการ (Director Level)</option></select></div>
+    </div>
+    
+    <div style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--teal)">21 CFR Part 11 — Electronic Signature</div>
+      <div style="display:flex;gap:8px"><input type="password" class="finput" id="drm-pin" placeholder="กรอก PIN 4 หลักเพื่อลงนามยืนยัน" autocomplete="new-password"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-sm" onclick="printRepairApproval(activeRepairId)">🖨 พิมพ์อนุมัติซ่อม</button>
+      <button class="btn btn-sm" onclick="printRepairForm(activeRepairId)">🖨 พิมพ์ใบแจ้งซ่อม</button>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="updateRepairTicket()">บันทึกข้อมูลงานซ่อม</button>
+  </div>
+</div>
+
+<!-- Create PM / Cal Plan Drawer -->
+<div class="drawer" id="drawer-pm-create">
+  <div class="drawer-head"><div><div class="drawer-title">สร้างแผนบำรุงรักษา/สอบเทียบ</div><div class="drawer-sub">สร้าง Work Order ใหม่</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div class="form-row col2">
+      <div class="ff span2"><label class="flabel">อุปกรณ์ <span class="req">*</span></label><select class="finput" id="pm-create-device"><option value="">-- เลือกอุปกรณ์ --</option></select></div>
+      <div class="ff"><label class="flabel">ประเภทงาน <span class="req">*</span></label><select class="finput" id="pm-create-type"><option value="PM (IPM)">PM (IPM)</option><option value="สอบเทียบ (Calibration)">สอบเทียบ (Calibration)</option><option value="ตรวจสอบอื่นๆ">ตรวจสอบอื่นๆ</option></select></div>
+      <div class="ff"><label class="flabel">กำหนดการ (Due Date) <span class="req">*</span></label><input class="finput" type="date" id="pm-create-due"></div>
+      <div class="ff span2"><label class="flabel">ผู้รับผิดชอบ</label><select class="finput" id="pm-create-resp"><option value="">-- ระบุช่างหรือหน่วยงาน --</option></select></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="submitPMPlan()">สร้างแผนงาน</button>
+  </div>
+</div>
+
+<!-- Manage PM / Cal Drawer -->
+<div class="drawer" id="drawer-pm-manage">
+  <div class="drawer-head"><div><div class="drawer-title" id="dpm-title">บันทึกผลบำรุงรักษา/สอบเทียบ</div><div class="drawer-sub" id="dpm-sub">WO-XXXX · ME-XXXX</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">บันทึกผลการดำเนินงาน</div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">สถานะงาน</label><select class="finput" id="dpm-status"><option>รอดำเนินการ</option><option>เสร็จสิ้น</option><option>ยกเลิก</option></select></div>
+      <div class="ff"><label class="flabel">ผลการตรวจสอบ (Result) <span class="req">*</span></label><select class="finput" id="dpm-result"><option value="">-- เลือกผล --</option><option>ผ่านเกณฑ์มาตรฐาน (Pass)</option><option>ผ่านแบบมีเงื่อนไข/ปรับตั้ง (Adjusted)</option><option>ไม่ผ่าน (Fail) - ต้องส่งซ่อม</option></select></div>
+      <div class="ff"><label class="flabel">ค่าก่อนปรับตั้ง (As Found)</label><input class="finput" id="dpm-before" placeholder="เช่น 98%"></div>
+      <div class="ff"><label class="flabel">ค่าหลังปรับตั้ง (As Left)</label><input class="finput" id="dpm-after" placeholder="เช่น 100%"></div>
+      <div class="ff span2"><label class="flabel">เครื่องมืออ้างอิง / Traceability (NIMT)</label><input class="finput" id="dpm-trace" placeholder="ระบุ S/N หรือรหัสใบรับรองของ Standard Analyzer"></div>
+      <div class="ff"><label class="flabel">ค่าใช้จ่าย (บาท)</label><input class="finput" type="number" id="dpm-cost" placeholder="0"></div>
+      <div class="ff"><label class="flabel">ผู้ดำเนินการ / บริษัทภายนอก</label><input class="finput" id="dpm-resp" placeholder="ชื่อผู้ตรวจสอบ"></div>
+      <div class="ff span2"><label class="flabel">แนบไฟล์ผลสอบเทียบ (Certificate/Report)</label><input class="finput" type="file" id="dpm-file" accept=".pdf,.jpg,.jpeg,.png"></div>
+    </div>
+
+    <div id="dpm-checklist-section" style="margin-top:16px"></div>
+
+    <div style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--teal)">21 CFR Part 11 — Electronic Signature</div>
+      <div style="display:flex;gap:8px"><input type="password" class="finput" id="dpm-pin" placeholder="กรอก PIN 4 หลักเพื่อลงนามยืนยัน" autocomplete="new-password"></div>
+    </div>
+
+    <div id="dpm-history" style="margin-top:20px;"></div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="updatePMTicket()">บันทึกข้อมูล</button>
+  </div>
+</div>
+
+<!-- Pre-Inspect Drawer (สำหรับ BMED) -->
+<div class="drawer" id="drawer-pre-inspect">
+  <div class="drawer-head"><div><div class="drawer-title">ตรวจสอบก่อนส่งมอบ (Pre-loan Inspect)</div><div class="drawer-sub" id="pi-sub"></div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div class="ff" style="margin-bottom:12px;padding:12px;background:var(--teal-ll);border-radius:var(--r);border:1px solid var(--teal-d)">
+      <label class="flabel" style="color:var(--teal)">ระบบอัจฉริยะจัดสรรเครื่อง (Smart Allocation)</label>
+      <select class="finput" id="pi-alloc-id" style="border-color:var(--teal);font-weight:600;color:var(--teal)"></select>
+      <div style="font-size:10px;color:var(--teal);margin-top:4px">ทีมช่างสามารถปรับเปลี่ยนเครื่องที่จะส่งมอบได้ ระบบจะแนะนำเครื่องในหมวดเดียวกันที่พร้อมใช้ที่สุด (FIFO) ให้อัตโนมัติ</div>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">Pre-loan Inspection Checklist</div>
+    <div class="progress-track" style="margin-bottom:4px"><div class="progress-fill" id="pi-chk-progress" style="width:0%"></div></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px;text-align:right" id="pi-chk-count-text">0 / 9 รายการ</div>
+    <div class="panel" style="box-shadow:none;border-color:var(--border)">
+      <div class="chk-list" id="pi-checklist">
+        <div class="chk-cat">ก. ตรวจสอบกายภาพ</div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">ตัวเครื่องไม่มีรอยแตก บิ่น หรือชำรุด</div></div></div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">สายเคเบิลและขั้วต่อครบ ไม่ชำรุด</div></div></div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">ป้ายสอบเทียบ (Cal. sticker) ไม่หมดอายุ</div></div></div>
+        <div class="chk-cat">ข. Functional check</div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">Boot ปกติ ไม่มี error code</div></div></div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">Alarm test ผ่านทุก channel</div></div></div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">ค่าที่วัดได้อยู่ในเกณฑ์ (ทดสอบกับ reference)</div></div></div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">Battery / power พร้อม ชาร์จเต็ม</div></div></div>
+        <div class="chk-cat">ค. Electrical Safety (IEC 62353)</div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">Earth leakage current ≤ ค่ามาตรฐาน</div></div></div>
+        <div class="chk-item" onclick="togglePiChk(this)"><div class="chk-box"><svg viewBox="0 0 10 8"><path d="M1 4l3 3 5-6"/></svg></div><div class="chk-body"><div class="chk-title">Insulation resistance อยู่ในเกณฑ์</div></div></div>
+      </div>
+    </div>
+    <div style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--teal)">ลงนามอนุมัติส่งมอบ (e-Signature)</div>
+      <div style="display:flex;gap:8px"><input type="password" class="finput" id="pi-pin" placeholder="กรอก PIN 4 หลัก" autocomplete="new-password"></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" id="btn-submit-pi" onclick="submitPreInspect()" disabled>✓ อนุมัติให้ยืมและส่งมอบ</button>
+  </div>
+</div>
+
+<!-- Post-Inspect Drawer -->
+<div class="drawer" id="drawer-post-inspect">
+  <div class="drawer-head"><div><div class="drawer-title">ตรวจสอบหลังรับคืน (Post-Inspect)</div><div class="drawer-sub" id="dpi-sub"></div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px;letter-spacing:.05em;text-transform:uppercase">การประเมินสภาพเครื่องมือ (Condition Assessment)</div>
+    
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px">
+      <div style="background:var(--surface2);padding:12px;border-radius:var(--r);border:1px solid var(--border)">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px">1. การทำความสะอาด (Decontamination)</div>
+        <div class="radio-group">
+          <input type="radio" name="dpi_clean" id="dpi_clean_pass" value="ผ่าน" checked onchange="checkDpiIssues()">
+          <label for="dpi_clean_pass" class="rg-pass">✓ สะอาด / ฆ่าเชื้อแล้ว</label>
+          <input type="radio" name="dpi_clean" id="dpi_clean_fail" value="ไม่ผ่าน" onchange="checkDpiIssues()">
+          <label for="dpi_clean_fail" class="rg-fail">✗ ยังไม่ทำความสะอาด</label>
+        </div>
+      </div>
+      <div style="background:var(--surface2);padding:12px;border-radius:var(--r);border:1px solid var(--border)">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px">2. สภาพกายภาพ (Physical Condition)</div>
+        <div class="radio-group">
+          <input type="radio" name="dpi_phys" id="dpi_phys_pass" value="ผ่าน" checked onchange="checkDpiIssues()">
+          <label for="dpi_phys_pass" class="rg-pass">✓ สมบูรณ์ ไม่มีรอยแตก</label>
+          <input type="radio" name="dpi_phys" id="dpi_phys_fail" value="ไม่ผ่าน" onchange="checkDpiIssues()">
+          <label for="dpi_phys_fail" class="rg-fail">✗ ชำรุด / แตกหัก</label>
+        </div>
+      </div>
+      <div style="background:var(--surface2);padding:12px;border-radius:var(--r);border:1px solid var(--border)">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px">3. อุปกรณ์เสริม (Accessories)</div>
+        <div class="radio-group">
+          <input type="radio" name="dpi_acc" id="dpi_acc_pass" value="ผ่าน" checked onchange="checkDpiIssues()">
+          <label for="dpi_acc_pass" class="rg-pass">✓ ครบถ้วน</label>
+          <input type="radio" name="dpi_acc" id="dpi_acc_fail" value="ไม่ผ่าน" onchange="checkDpiIssues()">
+          <label for="dpi_acc_fail" class="rg-warn">! สูญหาย / ไม่ครบ</label>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">สรุปสถานะการรับเข้าคลัง</div>
+    <div class="form-row col2">
+      <div class="ff span2">
+        <label class="flabel">สถานะหลังตรวจสอบ <span class="req">*</span></label>
+        <div class="radio-group">
+          <input type="radio" name="dpi_status" id="dpi_status_ready" value="พร้อมใช้" checked>
+          <label for="dpi_status_ready" class="rg-neutral">นำกลับเข้าคลัง (พร้อมใช้)</label>
+          <input type="radio" name="dpi_status" id="dpi_status_repair" value="ซ่อม">
+          <label for="dpi_status_repair" class="rg-fail">ชำรุด (ส่งแจ้งซ่อม CM)</label>
+        </div>
+      </div>
+      <div class="ff span2"><label class="flabel">หมายเหตุ / สิ่งที่พบ</label><input class="finput" id="dpi-note" placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)..."></div>
+    </div>
+    <div style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--teal)">21 CFR Part 11 — Electronic Signature</div>
+      <div style="display:flex;gap:8px"><input type="password" class="finput" id="dpi-pin" placeholder="กรอก PIN 4 หลักเพื่อลงนามยืนยัน" autocomplete="new-password"></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="submitPostInspect()">บันทึกผลตรวจสอบ</button>
+  </div>
+</div>
+
+<!-- Create Incident Drawer -->
+<div class="drawer" id="drawer-incident-create">
+  <div class="drawer-head"><div><div class="drawer-title">รายงานอุบัติการณ์ (New Incident)</div><div class="drawer-sub">รายงานเหตุการณ์ไม่พึงประสงค์ความเสี่ยง</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div class="form-row col2">
+      <div class="ff span2"><label class="flabel">อุปกรณ์ที่เกี่ยวข้อง <span class="req">*</span></label><select class="finput" id="inc-create-device"><option value="">-- เลือกอุปกรณ์ --</option></select></div>
+      <div class="ff"><label class="flabel">วันที่เกิดเหตุ <span class="req">*</span></label><input type="date" class="finput" id="inc-create-date"></div>
+      <div class="ff"><label class="flabel">ผู้รายงาน</label><input type="text" class="finput" id="inc-create-reporter" placeholder="ระบุชื่อผู้รายงาน"></div>
+      <div class="ff span2"><label class="flabel">ระดับความรุนแรง (Severity) <span class="req">*</span></label><select class="finput" id="inc-create-severity">
+        <option value="High (Sentinel Event - กระทบผู้ป่วย)">High (Sentinel Event - กระทบผู้ป่วย)</option>
+        <option value="Medium (บาดเจ็บเล็กน้อย/ทรัพย์สินเสียหาย)" selected>Medium (บาดเจ็บเล็กน้อย/ทรัพย์สินเสียหาย)</option>
+        <option value="Low (Near Miss / ไม่เกิดความเสียหาย)">Low (Near Miss / ไม่เกิดความเสียหาย)</option>
+      </select></div>
+      <div class="ff span2"><label class="flabel">รายละเอียดเหตุการณ์ <span class="req">*</span></label><textarea class="finput" rows="4" id="inc-create-event" placeholder="อธิบายเหตุการณ์ที่เกิดขึ้น..."></textarea></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-red" onclick="submitIncident()">ส่งรายงาน</button>
+  </div>
+</div>
+
+<!-- Incident & CAPA Drawer -->
+<div class="drawer" id="drawer-incident">
+  <div class="drawer-head"><div><div class="drawer-title" id="dinc-title">วิเคราะห์อุบัติการณ์ (CAPA)</div><div class="drawer-sub" id="dinc-sub"></div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div style="background:var(--red-l);border:1px solid #fca5a5;border-radius:var(--r);padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:4px" id="dinc-severity">ระดับความรุนแรง: สูง (Sentinel Event)</div>
+      <div style="font-size:12px;color:var(--red)" id="dinc-event">รายละเอียด...</div>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">การวิเคราะห์หาสาเหตุ และแนวทางป้องกัน (CAPA)</div>
+    <div class="form-row col2">
+      <div class="ff span2"><label class="flabel">Root Cause Analysis (สาเหตุรากเหง้า) <span class="req">*</span></label><textarea class="finput" rows="2" id="dinc-rca" placeholder="ระบุสาเหตุที่แท้จริง..."></textarea></div>
+      <div class="ff span2"><label class="flabel">Corrective Action (การแก้ไขทันที) <span class="req">*</span></label><textarea class="finput" rows="2" id="dinc-ca" placeholder="ระบุการแก้ไขเบื้องต้น..."></textarea></div>
+      <div class="ff span2"><label class="flabel">Preventive Action (การป้องกันระยะยาว) <span class="req">*</span></label><textarea class="finput" rows="2" id="dinc-pa" placeholder="ระบุแนวทางป้องกันไม่ให้เกิดซ้ำ..."></textarea></div>
+      <div class="ff"><label class="flabel">สถานะการดำเนินการ</label><select class="finput" id="dinc-status"><option>รอดำเนินการ</option><option>กำลังสืบสวน (Investigation)</option><option>ปิดแล้ว (Closed)</option></select></div>
+      <div class="ff"><label class="flabel">e-Signature (PIN)</label><input type="password" class="finput" id="dinc-pin" placeholder="PIN 4 หลัก" autocomplete="new-password"></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="submitCAPA()">บันทึกผล CAPA</button>
+  </div>
+</div>
+
+<!-- Add QMS Doc Drawer -->
+<div class="drawer" id="drawer-qms-add">
+  <div class="drawer-head"><div><div class="drawer-title">เพิ่มเอกสาร QMS/SOP</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div class="form-row col2">
+      <div class="ff span2"><label class="flabel">รหัสเอกสาร <span class="req">*</span></label><input class="finput" id="qms-id" placeholder="เช่น SOP-BMED-03"></div>
+      <div class="ff span2"><label class="flabel">ชื่อเอกสาร <span class="req">*</span></label><input class="finput" id="qms-name" placeholder="ระบุชื่อเอกสาร..."></div>
+      <div class="ff"><label class="flabel">Revision</label><input class="finput" id="qms-rev" placeholder="เช่น 01"></div>
+      <div class="ff"><label class="flabel">วันบังคับใช้ <span class="req">*</span></label><input type="date" class="finput" id="qms-date"></div>
+      <div class="ff span2"><label class="flabel">แนบไฟล์ (PDF)</label><input type="file" class="finput" accept=".pdf"></div>
+    </div>
+  </div>
+  <div class="drawer-foot"><button class="btn" onclick="closeDrawer()">ยกเลิก</button><button class="btn btn-teal" onclick="submitQMS()">บันทึกเอกสาร</button></div>
+</div>
+
+<!-- Add Training Drawer -->
+<div class="drawer" id="drawer-training-add">
+  <div class="drawer-head"><div><div class="drawer-title">เพิ่มบันทึกการฝึกอบรม</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <div class="form-row col2">
+      <div class="ff span2"><label class="flabel">บุคลากร <span class="req">*</span></label><select class="finput" id="trn-user"></select></div>
+      <div class="ff span2"><label class="flabel">หลักสูตร / หัวข้อ <span class="req">*</span></label><input class="finput" id="trn-course" placeholder="ระบุหลักสูตร..."></div>
+      <div class="ff"><label class="flabel">วันที่อบรม <span class="req">*</span></label><input type="date" class="finput" id="trn-date"></div>
+      <div class="ff"><label class="flabel">ผลการประเมิน</label><select class="finput" id="trn-result"><option>ผ่านเกณฑ์</option><option>ไม่ผ่านเกณฑ์</option></select></div>
+      <div class="ff span2"><label class="flabel">แนบเอกสารรับรอง (Certificate)</label><input type="file" class="finput"></div>
+    </div>
+  </div>
+  <div class="drawer-foot"><button class="btn" onclick="closeDrawer()">ยกเลิก</button><button class="btn btn-teal" onclick="submitTraining()">บันทึก</button></div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<!-- FAB: New Loan -->
+<button class="fab" id="app-fab" onclick="goto('newloan',null)" title="บันทึกยืมใหม่" style="display:none">
+  <span class="fab-tooltip">+ บันทึกยืมใหม่  <kbd style="background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3);color:#fff">Alt+N</kbd></span>
+  <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<!-- Keyboard Shortcut Overlay -->
+<div id="shortcut-overlay" onclick="if(event.target===this)toggleShortcutHelp()">
+  <div class="shortcut-box">
+    <h3>⌨ Keyboard Shortcuts</h3>
+    <div class="sc-grid">
+      <span class="sc-key"><kbd>Alt</kbd> + <kbd>1</kbd></span><span class="sc-desc">Dashboard</span>
+      <span class="sc-key"><kbd>Alt</kbd> + <kbd>2</kbd></span><span class="sc-desc">ทะเบียนอุปกรณ์</span>
+      <span class="sc-key"><kbd>Alt</kbd> + <kbd>3</kbd></span><span class="sc-desc">ยืม - คืน</span>
+      <span class="sc-key"><kbd>Alt</kbd> + <kbd>4</kbd></span><span class="sc-desc">Preventive Maint.</span>
+      <span class="sc-key"><kbd>Alt</kbd> + <kbd>5</kbd></span><span class="sc-desc">แจ้งซ่อม (CM)</span>
+      <span class="sc-key"><kbd>Alt</kbd> + <kbd>N</kbd></span><span class="sc-desc">บันทึกยืมใหม่</span>
+      <span class="sc-key"><kbd>Alt</kbd> + <kbd>S</kbd></span><span class="sc-desc">ตั้งค่า</span>
+      <span class="sc-key"><kbd>Esc</kbd></span><span class="sc-desc">ปิด Drawer / Modal</span>
+      <span class="sc-key"><kbd>?</kbd></span><span class="sc-desc">แสดง/ซ่อน หน้าต่างนี้</span>
+    </div>
+    <button class="btn btn-teal" style="width:100%;justify-content:center" onclick="toggleShortcutHelp()">ปิด</button>
+  </div>
+</div>
+
+<!-- Custom Popup -->
+<div id="popup-overlay">
+  <div class="popup-box">
+    <div id="popup-icon-wrap" class="popup-icon confirm">
+      <svg id="popup-icon-svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </div>
+    <div id="popup-title" class="popup-title"></div>
+    <div id="popup-msg" class="popup-msg"></div>
+    <div id="popup-input-wrap" style="margin-bottom:16px;display:none">
+      <input id="popup-input" class="finput" style="text-align:left">
+    </div>
+    <div class="popup-foot">
+      <button id="popup-cancel" class="btn" onclick="popupResolve(false)">ยกเลิก</button>
+      <button id="popup-ok" class="btn btn-teal" onclick="popupResolve(true)">ตกลง</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════ DRAWER: SERVICE CONTRACT ═══════════ -->
+<div class="drawer" id="drawer-contract-edit">
+  <div class="drawer-head"><div><div class="drawer-title" id="dct-title">เพิ่มสัญญาบริการ</div><div class="drawer-sub">ISO 13485 §7.4 — Vendor &amp; Contract Control</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <input type="hidden" id="dct-id">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">ข้อมูลสัญญา</div>
+    <div class="form-row col2">
+      <div class="ff span2"><label class="flabel">ชื่อสัญญา <span class="req">*</span></label><input class="finput" id="dct-title-field" placeholder="เช่น สัญญาบำรุงรักษา Ventilator ICU ครบวงจร"></div>
+      <div class="ff"><label class="flabel">Vendor / บริษัท <span class="req">*</span></label>
+        <select class="finput" id="dct-vendor"></select>
+      </div>
+      <div class="ff"><label class="flabel">ประเภทสัญญา</label>
+        <select class="finput" id="dct-type">
+          <option>Full Service</option>
+          <option>PM + Calibration</option>
+          <option>PM Only</option>
+          <option>Parts Only</option>
+          <option>Calibration Only</option>
+          <option>On-call Service</option>
+        </select>
+      </div>
+      <div class="ff"><label class="flabel">ชื่อผู้ติดต่อ (Contact Person)</label><input class="finput" id="dct-contact" placeholder="คุณ..."></div>
+      <div class="ff"><label class="flabel">เบอร์โทรศัพท์</label><input class="finput" id="dct-tel" placeholder="02-xxx-xxxx"></div>
+      <div class="ff"><label class="flabel">วันเริ่มต้นสัญญา</label><input class="finput" type="date" id="dct-start"></div>
+      <div class="ff"><label class="flabel">วันสิ้นสุดสัญญา <span class="req">*</span></label><input class="finput" type="date" id="dct-end" oninput="previewContractExpiry()"></div>
+      <div id="dct-expiry-preview" style="grid-column:span 2;font-size:12px;margin-top:-8px"></div>
+      <div class="ff"><label class="flabel">มูลค่าสัญญา (บาท/ปี)</label><input class="finput" type="number" id="dct-value" placeholder="0"></div>
+      <div class="ff"><label class="flabel">เลขที่สัญญา / เอกสารอ้างอิง</label><input class="finput" id="dct-docref" placeholder="เลขที่ สัญญาเลขที่ 001/2567"></div>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:14px 0 10px;letter-spacing:.05em;text-transform:uppercase">ข้อกำหนด SLA</div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">Response Time SLA (ชั่วโมง)</label><input class="finput" type="number" id="dct-sla-resp" placeholder="เช่น 4"></div>
+      <div class="ff"><label class="flabel">Uptime Guarantee (%)</label><input class="finput" type="number" id="dct-sla-up" min="0" max="100" placeholder="เช่น 95"></div>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:14px 0 10px;letter-spacing:.05em;text-transform:uppercase">อุปกรณ์ที่ครอบคลุม</div>
+    <div id="dct-devices-checklist" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;background:var(--surface2);border-radius:var(--r);padding:10px"></div>
+
+    <div class="ff" style="margin-top:14px"><label class="flabel">หมายเหตุ / เงื่อนไขพิเศษ</label><textarea class="finput" id="dct-note" rows="2" placeholder="ระบุข้อยกเว้นหรือเงื่อนไขพิเศษ..."></textarea></div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="saveContract()">บันทึกสัญญา</button>
+  </div>
+</div>
+
+<!-- ═══════════ DRAWER: SAFETY TEST ═══════════ -->
+<div class="drawer" id="drawer-safety-form">
+  <div class="drawer-head"><div><div class="drawer-title" id="dst-title">บันทึกผลทดสอบความปลอดภัยไฟฟ้า</div><div class="drawer-sub">IEC 62353 — Electrical Safety Test</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <input type="hidden" id="dst-id">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">ข้อมูลอุปกรณ์และเครื่องมือทดสอบ</div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">อุปกรณ์ที่ทดสอบ <span class="req">*</span></label>
+        <select class="finput" id="dst-device" onchange="fillSafetyDeviceInfo()"><option value="">-- เลือกอุปกรณ์ --</option></select>
+      </div>
+      <div class="ff"><label class="flabel">วันที่ทดสอบ <span class="req">*</span></label><input class="finput" type="date" id="dst-date"></div>
+      <div class="ff"><label class="flabel">Device Class</label>
+        <select class="finput" id="dst-class" onchange="updateSafetyLimits()">
+          <option value="I">Class I (มี Earth / กราวด์)</option>
+          <option value="II">Class II (Double Insulation)</option>
+        </select>
+      </div>
+      <div class="ff"><label class="flabel">Applied Part Type</label>
+        <select class="finput" id="dst-apptype" onchange="updateSafetyLimits()">
+          <option value="B">Type B (Body)</option>
+          <option value="BF">Type BF (Body Floating)</option>
+          <option value="CF">Type CF (Cardiac Floating)</option>
+          <option value="-">ไม่มี Applied Part</option>
+        </select>
+      </div>
+      <div class="ff"><label class="flabel">เครื่องทดสอบ (Analyzer)</label><input class="finput" id="dst-tester" placeholder="เช่น Fluke ESA615"></div>
+      <div class="ff"><label class="flabel">S/N เครื่องทดสอบ</label><input class="finput" id="dst-testerserial" placeholder="เช่น FSA-12345"></div>
+      <div class="ff span2"><label class="flabel">ใบรับรองการสอบเทียบ Analyzer (Cal. Due)</label><input class="finput" id="dst-testercal" placeholder="วันหมดอายุใบรับรอง"></div>
+    </div>
+
+    <div id="safety-limits-info" style="background:var(--surface2);border-radius:var(--r);padding:10px 14px;margin:14px 0;font-size:11px;color:var(--text2)"></div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">ผลการทดสอบ (Test Results)</div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">Earth Resistance (Ω) <span style="color:var(--text3);font-size:10px">spec: ≤0.2 Ω</span></label>
+        <input class="finput" type="number" step="0.01" id="dst-earth" placeholder="0.00" oninput="evalSafetyField('dst-earth','dst-earth-pass',0.2,'lte')">
+        <div id="dst-earth-pass" style="font-size:11px;margin-top:3px"></div>
+      </div>
+      <div class="ff"><label class="flabel">Insulation Resistance (MΩ) <span style="color:var(--text3);font-size:10px">spec: ≥2 MΩ</span></label>
+        <input class="finput" type="number" step="0.1" id="dst-insres" placeholder="999" oninput="evalSafetyField('dst-insres','dst-insres-pass',2,'gte')">
+        <div id="dst-insres-pass" style="font-size:11px;margin-top:3px"></div>
+      </div>
+      <div class="ff"><label class="flabel">Equipment Leakage (μA) <span id="dst-eqleak-spec" style="color:var(--text3);font-size:10px"></span></label>
+        <input class="finput" type="number" id="dst-eqleak" placeholder="0" oninput="evalSafetyLeakField()">
+        <div id="dst-eqleak-pass" style="font-size:11px;margin-top:3px"></div>
+      </div>
+      <div class="ff"><label class="flabel">Patient Leakage (μA) <span id="dst-patleak-spec" style="color:var(--text3);font-size:10px"></span></label>
+        <input class="finput" type="number" id="dst-patleak" placeholder="0" oninput="evalSafetyLeakField()">
+        <div id="dst-patleak-pass" style="font-size:11px;margin-top:3px"></div>
+      </div>
+      <div class="ff"><label class="flabel">Applied Part Leakage (μA) <span id="dst-appleak-spec" style="color:var(--text3);font-size:10px"></span></label>
+        <input class="finput" type="number" id="dst-appleak" placeholder="0" oninput="evalSafetyLeakField()">
+        <div id="dst-appleak-pass" style="font-size:11px;margin-top:3px"></div>
+      </div>
+      <div class="ff"><label class="flabel">ผู้ทดสอบ</label><input class="finput" id="dst-tech" placeholder="ชื่อผู้ทดสอบ"></div>
+      <div class="ff span2"><label class="flabel">หมายเหตุ / ข้อสังเกต</label><input class="finput" id="dst-note" placeholder="ระบุหากมีข้อสังเกตเพิ่มเติม"></div>
+    </div>
+
+    <div id="dst-overall" style="background:var(--surface2);border-radius:var(--r);padding:12px 16px;margin-top:4px;font-size:13px;font-weight:700;text-align:center">กรุณากรอกข้อมูลผลทดสอบ</div>
+
+    <div style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--teal)">21 CFR Part 11 — Electronic Signature</div>
+      <input type="password" class="finput" id="dst-pin" placeholder="กรอก PIN 4 หลักเพื่อลงนามยืนยัน" autocomplete="new-password">
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="saveSafetyTest()">บันทึกผลทดสอบ</button>
+  </div>
+</div>
+
+<!-- ═══════════ DRAWER: SPARE PART ═══════════ -->
+<div class="drawer" id="drawer-spare-edit">
+  <div class="drawer-head"><div><div class="drawer-title" id="dsp-title">เพิ่ม / แก้ไขรายการอะไหล่</div><div class="drawer-sub">คลังอะไหล่และสิ้นเปลือง — ISO 13485 §7.4</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
+  <div class="drawer-body">
+    <input type="hidden" id="dsp-id">
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">ชื่ออะไหล่ <span class="req">*</span></label><input class="finput" id="dsp-name" placeholder="ชื่อรายการ"></div>
+      <div class="ff"><label class="flabel">Part No. / รหัสชิ้นส่วน</label><input class="finput" id="dsp-partno" placeholder="เช่น REF-DS100A"></div>
+      <div class="ff"><label class="flabel">ประเภท</label>
+        <select class="finput" id="dsp-cat">
+          <option>Sensor/Probe</option><option>Accessory</option><option>Consumable</option>
+          <option>Cable/Lead</option><option>Patient Circuit</option><option>Electrode</option><option>Electronic</option><option>อื่นๆ</option>
+        </select>
+      </div>
+      <div class="ff"><label class="flabel">หน่วย</label><input class="finput" id="dsp-unit" placeholder="เช่น ชิ้น / ชุด / คู่"></div>
+      <div class="ff"><label class="flabel">จำนวนคงเหลือ <span class="req">*</span></label><input class="finput" type="number" id="dsp-qty" min="0" placeholder="0"></div>
+      <div class="ff"><label class="flabel">จำนวนขั้นต่ำ (Min Stock)</label><input class="finput" type="number" id="dsp-minqty" min="0" placeholder="0"></div>
+      <div class="ff"><label class="flabel">ราคา/หน่วย (บาท)</label><input class="finput" type="number" id="dsp-cost" min="0" placeholder="0"></div>
+      <div class="ff"><label class="flabel">ที่เก็บ / Location</label><input class="finput" id="dsp-loc" placeholder="เช่น ตู้ A1"></div>
+      <div class="ff"><label class="flabel">Vendor</label><input class="finput" id="dsp-vendor" placeholder="ชื่อบริษัท"></div>
+      <div class="ff"><label class="flabel">อุปกรณ์ที่ใช้ด้วย (Device ID)</label><input class="finput" id="dsp-compat" placeholder="เช่น ME-0001,ME-0012"></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="saveSparePart()">บันทึก</button>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: ANNUAL PM PLAN ═══════════ -->
+<div class="modal-overlay" id="modal-annual-pm" onclick="if(event.target===this) closeAnnualPMModal()">
+  <div class="modal" style="max-width:800px">
+    <div class="modal-head">
+      <div><div class="modal-title">สร้างแผนบำรุงรักษาประจำปี (Annual PM Plan)</div><div class="modal-sub">ECRI Guideline — Auto-generate PM Work Orders</div></div>
+      <div class="modal-close" onclick="closeAnnualPMModal()">×</div>
+    </div>
+    <div class="modal-body" style="padding-top:16px">
+      <div class="form-row" style="gap:12px;margin-bottom:16px">
+        <div class="ff"><label class="flabel">ปีงบประมาณ (พ.ศ.)</label>
+          <select class="finput" id="apm-year" onchange="previewAnnualPM()" style="width:auto">
+            <option value="2568">2568</option><option value="2569">2569</option><option value="2570">2570</option>
+          </select>
+        </div>
+        <div class="ff"><label class="flabel">กรองประเภท</label>
+          <select class="finput" id="apm-kind" onchange="previewAnnualPM()" style="width:auto">
+            <option value="both">PM + Cal ทั้งหมด</option>
+            <option value="pm">PM เท่านั้น</option>
+            <option value="cal">Cal เท่านั้น</option>
+          </select>
+        </div>
+      </div>
+      <div id="apm-preview" style="max-height:420px;overflow-y:auto"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeAnnualPMModal()">ยกเลิก</button>
+      <button class="btn btn-teal" onclick="generateAnnualPMPlan()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M8 2v12M2 8h12"/></svg> สร้างแผนงาน</button>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
