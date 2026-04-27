@@ -1254,8 +1254,20 @@
       <div class="ff"><label class="flabel">Uptime Guarantee (%)</label><input class="finput" type="number" id="dct-sla-up" min="0" max="100" placeholder="เช่น 95"></div>
     </div>
 
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:14px 0 10px;letter-spacing:.05em;text-transform:uppercase">อุปกรณ์ที่ครอบคลุม</div>
-    <div id="dct-devices-checklist" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;background:var(--surface2);border-radius:var(--r);padding:10px"></div>
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:14px 0 10px;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:8px">
+      อุปกรณ์ที่ครอบคลุม
+      <span id="dct-dev-count" style="font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--surface);background:var(--teal);padding:1px 8px;border-radius:10px;display:none">0</span>
+    </div>
+    <div style="position:relative">
+      <div style="position:relative">
+        <svg style="position:absolute;left:11px;top:50%;transform:translateY(-50%);width:14px;height:14px;stroke:var(--text3);fill:none;stroke-width:2;stroke-linecap:round;pointer-events:none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input class="finput" id="dct-device-search" style="padding-left:34px" placeholder="ค้นหาด้วยรหัส / ชื่ออุปกรณ์ / แผนก / ยี่ห้อ..." autocomplete="off" oninput="dctDeviceSearch()" onfocus="dctDeviceSearch()">
+      </div>
+      <div id="dct-device-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-md);z-index:310;max-height:220px;overflow-y:auto"></div>
+    </div>
+    <div id="dct-selected-devices" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;min-height:52px;background:var(--surface2);border:1.5px dashed var(--border2);border-radius:var(--r);padding:10px;align-items:flex-start;align-content:flex-start">
+      <span id="dct-empty-hint" style="color:var(--text3);font-size:12px;align-self:center;width:100%;text-align:center;padding:6px 0">ยังไม่มีอุปกรณ์ที่เลือก — ค้นหาและเพิ่มได้จากช่องด้านบน</span>
+    </div>
 
     <div class="ff" style="margin-top:14px"><label class="flabel">หมายเหตุ / เงื่อนไขพิเศษ</label><textarea class="finput" id="dct-note" rows="2" placeholder="ระบุข้อยกเว้นหรือเงื่อนไขพิเศษ..."></textarea></div>
   </div>

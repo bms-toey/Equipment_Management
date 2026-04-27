@@ -77,6 +77,7 @@ let chkCount = 0;
 const TOTAL_CHK = 9;
 let currentLoanFilter = 'all';
 let currentDrawer = null;
+let dctSelectedDeviceIds = [];
 
 let currentUser = null;
 
@@ -1674,6 +1675,83 @@ function showContractSLA(contractId) {
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+/* ── Contract Device Smart Search ── */
+function dctDeviceSearch() {
+  const q = (document.getElementById('dct-device-search')?.value || '').trim().toLowerCase();
+  const dd = document.getElementById('dct-device-dropdown');
+  if (!dd) return;
+  const candidates = DB.assets.filter(a =>
+    a.status !== 'จำหน่าย/แทงจำหน่าย' &&
+    !dctSelectedDeviceIds.includes(a.id) &&
+    (q === '' || a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) ||
+     (a.dept||'').toLowerCase().includes(q) || (a.brand||'').toLowerCase().includes(q) ||
+     (a.model||'').toLowerCase().includes(q) || (a.category||'').toLowerCase().includes(q))
+  ).slice(0, 10);
+
+  if (candidates.length === 0) {
+    dd.style.display = 'block';
+    dd.innerHTML = `<div style="padding:14px 16px;color:var(--text3);font-size:12px;text-align:center">ไม่พบอุปกรณ์ที่ตรงกัน</div>`;
+    return;
+  }
+  dd.style.display = 'block';
+  dd.innerHTML = candidates.map(a => {
+    const statusColor = a.status === 'พร้อมใช้' ? 'var(--green)' : a.status === 'ส่งซ่อม' ? 'var(--amber)' : 'var(--text3)';
+    return `<div onclick="dctAddDevice('${a.id}')" style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .08s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <div style="width:32px;height:32px;border-radius:8px;background:var(--teal-d);display:grid;place-items:center;flex-shrink:0">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:700;color:var(--text)">${a.id} — ${a.name}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">${a.dept} · ${a.brand||''} ${a.model||''} · <span style="color:${statusColor}">${a.status}</span></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:var(--teal);background:var(--teal-d);padding:3px 10px;border-radius:6px;flex-shrink:0">+ เพิ่ม</div>
+    </div>`;
+  }).join('');
+}
+
+function dctAddDevice(assetId) {
+  if (!dctSelectedDeviceIds.includes(assetId)) {
+    dctSelectedDeviceIds.push(assetId);
+    dctRenderSelectedChips();
+  }
+  const srch = document.getElementById('dct-device-search');
+  if (srch) { srch.value = ''; srch.focus(); }
+  const dd = document.getElementById('dct-device-dropdown');
+  if (dd) dd.style.display = 'none';
+  dctDeviceSearch(); // refresh dropdown to remove just-added item
+}
+
+function dctRemoveDevice(assetId) {
+  dctSelectedDeviceIds = dctSelectedDeviceIds.filter(id => id !== assetId);
+  dctRenderSelectedChips();
+  const srch = document.getElementById('dct-device-search');
+  if (srch && srch.value.length > 0) dctDeviceSearch();
+}
+
+function dctRenderSelectedChips() {
+  const container = document.getElementById('dct-selected-devices');
+  const hint = document.getElementById('dct-empty-hint');
+  const countBadge = document.getElementById('dct-dev-count');
+  if (!container) return;
+  if (dctSelectedDeviceIds.length === 0) {
+    container.innerHTML = `<span id="dct-empty-hint" style="color:var(--text3);font-size:12px;align-self:center;width:100%;text-align:center;padding:6px 0">ยังไม่มีอุปกรณ์ที่เลือก — ค้นหาและเพิ่มได้จากช่องด้านบน</span>`;
+    if (countBadge) countBadge.style.display = 'none';
+    return;
+  }
+  if (countBadge) { countBadge.textContent = dctSelectedDeviceIds.length; countBadge.style.display = 'inline'; }
+  container.innerHTML = dctSelectedDeviceIds.map(id => {
+    const a = DB.assets.find(x => x.id === id);
+    const label = a ? `${a.id} — ${a.name}` : id;
+    const dept  = a ? a.dept : '';
+    return `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--teal-d);border:1px solid rgba(13,148,136,.25);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--teal);max-width:100%">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px" title="${label}">${label}</span>
+      ${dept?`<span style="font-weight:400;color:var(--teal-l);font-size:10px">(${dept})</span>`:''}
+      <span onclick="dctRemoveDevice('${id}')" title="ลบออก" style="cursor:pointer;width:16px;height:16px;border-radius:50%;background:rgba(13,148,136,.2);display:grid;place-items:center;flex-shrink:0;color:var(--teal);font-size:14px;line-height:1;transition:all .12s" onmouseover="this.style.background='var(--red)';this.style.color='#fff'" onmouseout="this.style.background='rgba(13,148,136,.2)';this.style.color='var(--teal)'">×</span>
+    </div>`;
+  }).join('');
+}
+
 function openContractDrawer(id = null) {
   document.getElementById('dct-id').value = id || '';
   // Populate vendor dropdown
@@ -1681,16 +1759,13 @@ function openContractDrawer(id = null) {
   if (vendorSel) {
     vendorSel.innerHTML = DB.settings.vendor.map(v => `<option value="${v.name}">${v.name}</option>`).join('');
   }
-  // Populate device checklist
-  const devList = document.getElementById('dct-devices-checklist');
-  if (devList) {
-    const existingDevices = id ? (DB.serviceContracts.find(x => x.id === id)?.coveredDevices || []) : [];
-    devList.innerHTML = DB.assets.filter(a => a.status !== 'จำหน่าย/แทงจำหน่าย').map(a =>
-      `<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;cursor:pointer;background:var(--surface)">
-        <input type="checkbox" value="${a.id}" ${existingDevices.includes(a.id)?'checked':''} style="accent-color:var(--teal)">
-        <span style="font-size:12px"><strong>${a.id}</strong> — ${a.name} (${a.dept})</span>
-      </label>`).join('');
-  }
+  // Init smart-search device picker
+  dctSelectedDeviceIds = id ? (DB.serviceContracts.find(x => x.id === id)?.coveredDevices || []) : [];
+  dctRenderSelectedChips();
+  const srchEl = document.getElementById('dct-device-search');
+  if (srchEl) srchEl.value = '';
+  const dd = document.getElementById('dct-device-dropdown');
+  if (dd) dd.style.display = 'none';
   if (id) {
     const c = DB.serviceContracts.find(x => x.id === id);
     if (!c) return;
@@ -1735,7 +1810,7 @@ function saveContract() {
   const endIso = document.getElementById('dct-end')?.value;
   if (!title || !vendor || !endIso) { toast('กรุณากรอกชื่อสัญญา บริษัท และวันสิ้นสุด', 'amber'); return; }
   const editId = document.getElementById('dct-id').value;
-  const checkedDevices = [...document.querySelectorAll('#dct-devices-checklist input[type=checkbox]:checked')].map(cb => cb.value);
+  const checkedDevices = [...dctSelectedDeviceIds];
   const endDate = new Date(endIso);
   const thMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   const endDateTh = `${endDate.getDate()} ${thMonths[endDate.getMonth()]} ${endDate.getFullYear()+543}`;
@@ -2985,6 +3060,8 @@ function closeDrawer() {
   if(currentDrawer) document.getElementById(currentDrawer)?.classList.remove('open');
   document.getElementById('drawer-backdrop').classList.remove('open');
   currentDrawer = null;
+  const dd = document.getElementById('dct-device-dropdown');
+  if (dd) dd.style.display = 'none';
 }
 
 function toggleNotifDrawer() {
@@ -3357,9 +3434,19 @@ function printRepairApproval(id) {
 /* ════════════════════════════════
    KEYBOARD
 ════════════════════════════════ */
+document.addEventListener('click', e => {
+  const dd = document.getElementById('dct-device-dropdown');
+  const srch = document.getElementById('dct-device-search');
+  if (dd && dd.style.display !== 'none' && !dd.contains(e.target) && e.target !== srch) {
+    dd.style.display = 'none';
+  }
+});
+
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape') {
     if(document.getElementById('shortcut-overlay').classList.contains('open')) { toggleShortcutHelp(); return; }
+    const dd = document.getElementById('dct-device-dropdown');
+    if (dd && dd.style.display !== 'none') { dd.style.display = 'none'; return; }
     closeDrawer(); hideSearchResults(); hideDeviceResults(); closeAddDeviceModal(); closeVendorModal(); closeQrScanner();
   }
   // Keyboard shortcuts (Alt+Key) — only when app shell is visible
