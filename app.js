@@ -1,4 +1,4 @@
-/* ════════════════════════════════
+﻿/* ════════════════════════════════
    CUSTOM POPUP SYSTEM
 ════════════════════════════════ */
 let _popupResolve = null;
@@ -81,11 +81,85 @@ let dctSelectedDeviceIds = [];
 
 let currentUser = null;
 
+/* ════════════════════════════════
+   ITEM 1 — localStorage PERSISTENCE (ISO 13485 §4.2.4)
+════════════════════════════════ */
+const DB_KEY = 'medtrack_db_v1';
+function saveDB() {
+  try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e) { console.warn('DB save:', e); }
+}
+function loadDB() {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    ['assets','loans','auditLog','pmList','repairs','incidents','qmsDocs','trainingRecords',
+     'users','settings','safetyTests','spareParts','serviceContracts','fsca','incomingQC','spareTransactions']
+      .forEach(k => { if (saved[k] !== undefined) DB[k] = saved[k]; });
+    DB.loans.forEach(l => { if (l.dueTs) l.dueTs = new Date(l.dueTs); });
+  } catch(e) { console.warn('DB load:', e); }
+}
+
+/* ════════════════════════════════
+   ITEM 2 — SESSION TIMEOUT (21 CFR Part 11 §11.10(e))
+════════════════════════════════ */
+let _sessionTimer = null;
+let _sessionWarnTimer = null;
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+const SESSION_WARN_MS   = 25 * 60 * 1000;
+
+function resetSessionTimer() {
+  if (!currentUser) return;
+  clearTimeout(_sessionTimer); clearTimeout(_sessionWarnTimer);
+  _sessionWarnTimer = setTimeout(() => {
+    if (currentUser) toast('เซสชันจะหมดอายุใน 5 นาที กรุณาดำเนินการต่อ','amber','ต่ออายุ', resetSessionTimer);
+  }, SESSION_WARN_MS);
+  _sessionTimer = setTimeout(() => {
+    if (currentUser) {
+      addAuditLog('AUTH', currentUserName(), 'ออกจากระบบอัตโนมัติ', 'Session timeout 30 นาที');
+      doLogout();
+      popAlert('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่', 'หมดเวลาเซสชัน');
+    }
+  }, SESSION_TIMEOUT_MS);
+}
+['click','keydown','mousemove','touchstart'].forEach(evt =>
+  document.addEventListener(evt, () => { if (currentUser) resetSessionTimer(); }, {passive:true})
+);
+
+/* ════════════════════════════════
+   ITEM 10 — LOGIN LOCKOUT (21 CFR Part 11 §11.10(d))
+════════════════════════════════ */
+const _failedLogins = new Map();
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 5 * 60 * 1000;
+function checkLoginLockout(username) {
+  const rec = _failedLogins.get(username.toLowerCase());
+  if (!rec || !rec.lockedUntil) return null;
+  if (Date.now() < rec.lockedUntil) {
+    const secsLeft = Math.ceil((rec.lockedUntil - Date.now()) / 1000);
+    return `บัญชีถูกล็อกชั่วคราว — ลองอีกครั้งใน ${secsLeft} วินาที`;
+  }
+  return null;
+}
+function recordFailedLogin(username) {
+  const key = username.toLowerCase();
+  const rec = _failedLogins.get(key) || {count:0, lockedUntil:null};
+  rec.count++;
+  if (rec.count >= LOGIN_MAX_ATTEMPTS) {
+    rec.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
+    rec.count = 0;
+    addAuditLog('AUTH','ระบบ','บัญชีถูกล็อก','เข้าสู่ระบบผิดพลาด '+LOGIN_MAX_ATTEMPTS+' ครั้ง: '+username);
+    saveDB();
+  }
+  _failedLogins.set(key, rec);
+}
+function clearFailedLogin(username) { _failedLogins.delete(username.toLowerCase()); }
+
 const ROLE_PERMISSIONS = {
-  admin:   ['dashboard','assets','loans','pm','repair','incident','audit','reports','settings','qms','safety','spare','contracts'],
-  bmed:    ['dashboard','assets','loans','pm','repair','incident','audit','reports','settings','qms','safety','spare','contracts'],
+  admin:   ['dashboard','assets','loans','pm','repair','incident','audit','reports','settings','qms','safety','spare','contracts','fsca'],
+  bmed:    ['dashboard','assets','loans','pm','repair','incident','audit','reports','settings','qms','safety','spare','contracts','fsca'],
   nurse:   ['dashboard','loans','incident'],
-  manager: ['dashboard','assets','loans','pm','repair','incident','audit','reports','contracts'],
+  manager: ['dashboard','assets','loans','pm','repair','incident','audit','reports','contracts','fsca'],
 };
 
 function currentUserName() { return currentUser ? currentUser.name : 'ระบบ'; }
@@ -109,6 +183,7 @@ const PAGE_META = {
   safety:      {title:'ทดสอบความปลอดภัยไฟฟ้า (IEC 62353)',breadcrumb:'medtrack / safety-test'},
   spare:       {title:'คลังอะไหล่ (Spare Parts)',         breadcrumb:'medtrack / spare-parts'},
   contracts:   {title:'สัญญาบริการ (Service Contract)',   breadcrumb:'medtrack / service-contract'},
+  fsca:        {title:'FSCA / Recall Management',         breadcrumb:'medtrack / fsca-recall'},
 };
 
 function goto(p, el) {
@@ -128,13 +203,14 @@ function goto(p, el) {
   if(p==='repair') { populateRepairDevices(); renderRepairTable(); }
   if(p==='incident') renderIncidentTable();
   if(p==='audit') renderAuditLog();
-  if(p==='reports') setTimeout(initReportCharts,100);
-  if(p==='qms') renderQMS();
+  if(p==='reports') { setTimeout(initReportCharts,100); setTimeout(refreshReportsKPIDynamic,150); }
+  if(p==='qms') { renderQMS(); renderIncomingQC(); }
   if(p==='dashboard') { refreshDashboard(); initDashboardCharts(); }
   if(p==='settings') renderSettings();
   if(p==='safety')    { renderSafetyTable(); renderSafetyKPI(); }
   if(p==='spare')     { renderSpareTable(); renderSpareKPI(); }
   if(p==='contracts') { renderContractsTable(); renderContractsKPI(); }
+  if(p==='fsca')      { renderFSCATable(); updateFSCANavBadge(); }
 }
 
 function gotoAs(p, el, title, breadcrumb) {
@@ -869,10 +945,41 @@ function openAssetDrawer(id) {
     `;
   }
 
+  // ISO 14971 risk score section
+  const riskScoreHtml = a.riskScore ? (() => {
+    const ri = riskInfo ? riskInfo(a.riskScore) : {level:a.riskLevel14971||'',color:'#64748b',bg:'#f8fafc'};
+    return `<div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">ISO 14971 Risk Assessment</div>
+      <div style="display:flex;gap:12px;align-items:center;background:${ri.bg};border:1px solid ${ri.color}40;border-radius:8px;padding:10px 14px">
+        <div style="text-align:center;min-width:60px">
+          <div style="font-size:30px;font-weight:800;color:${ri.color}">${a.riskScore}</div>
+          <div style="font-size:10px;color:${ri.color};font-weight:700">P=${a.riskP} x S=${a.riskS}</div>
+        </div>
+        <div><div style="font-weight:700;color:${ri.color}">${ri.level}</div>
+          <div style="font-size:11px;color:var(--text2)">${a.riskRationale||'ยังไม่มีหมายเหตุ'}</div>
+          <div style="font-size:10px;color:var(--text3)">ประเมินล่าสุด: ${a.riskDate||'—'}</div>
+        </div>
+      </div>`;
+  })() : '';
+
+  // Cal Certs section
+  const calCertsHtml = (a.calCerts && a.calCerts.length) ? `
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">ประวัติ Cal Certificate</div>
+    ${a.calCerts.slice().reverse().slice(0,3).map(c=>`
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div><span class="mono" style="font-weight:700">${c.certNo}</span> <span style="color:var(--text3)">(${c.pmId})</span></div>
+        <div style="color:var(--text3)">${c.date}</div>
+      </div>`).join('')}
+  ` : '';
+
+  if (riskScoreHtml || calCertsHtml) {
+    document.getElementById('drawer-asset-body').innerHTML += riskScoreHtml + calCertsHtml;
+  }
+
   document.getElementById('drawer-asset-foot').innerHTML = `
     <button class="btn" onclick="closeDrawer()">ปิด</button>
+    ${!isDecommissioned ? `<button class="btn" style="border-color:var(--amber);color:var(--amber)" onclick="openRiskModal('${a.id}')">Risk Assessment</button>` : ''}
     ${!isDecommissioned ? `<button class="btn btn-red" style="background:transparent;border-color:var(--red);color:var(--red)" onclick="decommissionAsset('${a.id}')">ปลดประจำการ</button>` : '<span class="badge red" style="align-self:center">ปลดประจำการแล้ว</span>'}
-    ${!isDecommissioned ? `<button class="btn btn-teal" style="margin-left:auto" onclick="openEditDeviceModal('${a.id}')">✏️ แก้ไขข้อมูล</button>` : ''}
+    ${!isDecommissioned ? `<button class="btn btn-teal" style="margin-left:auto" onclick="openEditDeviceModal('${a.id}')">แก้ไขข้อมูล</button>` : ''}
     ${a.status==='พร้อมใช้'?`<button class="btn btn-teal" onclick="closeDrawer();goto('newloan',document.getElementById('nav-newloan'))">+ บันทึกยืม</button>`:''}
   `;
   openDrawer('drawer-asset');
@@ -909,11 +1016,13 @@ function openAddDeviceModal() {
   document.getElementById('btn-submit-device').innerHTML = '✓ บันทึกและขึ้นทะเบียน';
   document.getElementById('add-id').disabled = false;
   
-  ['add-name','add-id','add-fda','add-category','add-sny','add-brand','add-model','add-serial',
+  ['add-name','add-fda','add-category','add-sny','add-brand','add-model','add-serial',
    'add-dept','add-risk','add-date','add-procurement','add-vendor','add-pm-freq','add-pm-last',
    'add-pm-next','add-cal-freq','add-cal-last','add-cal-next','add-accessories','add-parts-freq'].forEach(id => {
      const el = document.getElementById(id); if(el) el.value = '';
   });
+  const idEl = document.getElementById('add-id');
+  if (idEl) { idEl.value = previewDocId('asset'); idEl.style.color = 'var(--teal)'; }
   document.getElementById('add-depyears').value = 5;
 
   switchAddDeviceTab(1);
@@ -975,9 +1084,14 @@ function openEditDeviceModal(id) {
 
 function submitDevice() {
   const name = document.getElementById('add-name').value.trim();
-  const id = document.getElementById('add-id').value.trim();
+  let id = document.getElementById('add-id').value.trim();
+  if (!id) id = nextDocId('asset'); else if (!editingDeviceId) {
+    const cfg = DB.settings.docNumbering.asset;
+    const auto = cfg.prefix + '-' + String(cfg.seq + 1).padStart(cfg.digits, '0');
+    if (id === auto) nextDocId('asset'); // consume the seq if using the auto-suggested id
+  }
   const fda = document.getElementById('add-fda').value.trim();
-  if(!name||!id) { toast('กรุณากรอกชื่ออุปกรณ์และรหัสครุภัณฑ์','red'); return; }
+  if(!name||!id) { toast('กรุณากรอกชื่ออุปกรณ์','red'); return; }
   if(!fda && !editingDeviceId) { toast('กรุณากรอกเลขทะเบียน อย. สำหรับอุปกรณ์ใหม่','red'); return; }
   
   if(!editingDeviceId && DB.assets.find(a=>a.id===id)) { toast('รหัส '+id+' มีในระบบแล้ว','red'); return; }
@@ -1119,7 +1233,7 @@ function submitDecommission() {
 ════════════════════════════════ */
 function openRepairDrawer() {
   populateRepairDevices();
-  document.getElementById('repair-cmid').value = 'CM-'+Math.floor(Math.random()*9000+1000);
+  document.getElementById('repair-cmid').value = previewDocId('repair');
   openDrawer('drawer-repair');
 }
 
@@ -1130,7 +1244,7 @@ function populateRepairDevices() {
 }
 
 function submitRepair() {
-  const cmId = document.getElementById('repair-cmid').value;
+  const cmId = nextDocId('repair');
   const dev = document.getElementById('repair-device').value;
   const sym = document.getElementById('repair-symptom').value.trim();
   const loc = document.getElementById('repair-location').value;
@@ -1155,56 +1269,227 @@ function submitRepair() {
 }
 
 let activeRepairId = null;
+let _cmPartsTemp = [];
+let _cmCoTechsTemp = [];
+
+function renderCMPartsList() {
+  const list = document.getElementById('drm-parts-list');
+  if(!list) return;
+  if(!_cmPartsTemp.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px 2px">ยังไม่มีรายการอะไหล่</div>';
+    return;
+  }
+  list.innerHTML = _cmPartsTemp.map((p,i) => {
+    const sp = DB.spareParts.find(x=>x.id===p.spId);
+    const stock = sp ? sp.qty : '?';
+    const overStock = sp && p.qty > sp.qty;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:${overStock?'rgba(239,68,68,.06)':'var(--surface2)'};border-radius:6px;font-size:12px">
+      <span style="flex:1;font-weight:500">${p.name}</span>
+      <span style="color:var(--text3);font-size:11px">${p.unit||'ชิ้น'}</span>
+      <input type="number" value="${p.qty}" min="1" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:12px" onchange="_cmPartsTemp[${i}].qty=Math.max(1,parseInt(this.value)||1);renderCMPartsList()" title="คลังเหลือ ${stock} ${p.unit||'ชิ้น'}">
+      <span style="font-size:10px;color:${overStock?'var(--red)':'var(--text3)'}">คลัง:${stock}</span>
+      <button onclick="removeCMPart(${i})" type="button" style="border:none;background:none;cursor:pointer;color:var(--text3);padding:2px 4px;font-size:14px;line-height:1" title="นำออก">×</button>
+    </div>`;
+  }).join('');
+}
+
+function addCMPart() {
+  const sel = document.getElementById('drm-parts-sel');
+  const qtyEl = document.getElementById('drm-parts-qty');
+  if(!sel.value) { toast('กรุณาเลือกอะไหล่จากคลัง','amber'); return; }
+  const qty = Math.max(1, parseInt(qtyEl.value)||1);
+  const sp = DB.spareParts.find(x=>x.id===sel.value);
+  if(!sp) return;
+  const existing = _cmPartsTemp.find(p=>p.spId===sp.id);
+  if(existing) { existing.qty += qty; }
+  else { _cmPartsTemp.push({spId:sp.id, name:sp.name, qty, unit:sp.unit, unitCost:sp.unitCost}); }
+  qtyEl.value = 1;
+  sel.value = '';
+  renderCMPartsList();
+}
+
+function removeCMPart(idx) {
+  _cmPartsTemp.splice(idx, 1);
+  renderCMPartsList();
+}
+
+function renderCMCoTechsList() {
+  const list = document.getElementById('drm-cotechs-list');
+  if(!list) return;
+  if(!_cmCoTechsTemp.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:2px 0">ยังไม่มีช่างร่วม</div>';
+    return;
+  }
+  list.innerHTML = _cmCoTechsTemp.map(name =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:rgba(5,178,122,.1);border:1px solid rgba(5,178,122,.3);border-radius:99px;font-size:12px;color:var(--teal)">
+      ${name}
+      <button onclick="removeCMCoTech('${name.replace(/'/g,"\\'")}')" type="button" style="border:none;background:none;cursor:pointer;color:var(--teal);padding:0 0 0 2px;font-size:13px;line-height:1">×</button>
+    </span>`
+  ).join('');
+}
+
+function addCMCoTech() {
+  const sel = document.getElementById('drm-cotech-sel');
+  if(!sel.value) { toast('กรุณาเลือกช่าง','amber'); return; }
+  if(_cmCoTechsTemp.includes(sel.value)) { toast('เพิ่มช่างท่านนี้แล้ว','amber'); return; }
+  const mainTech = document.getElementById('drm-tech').value;
+  if(sel.value === mainTech) { toast('ช่างท่านนี้เป็นผู้รับผิดชอบหลักอยู่แล้ว','amber'); return; }
+  _cmCoTechsTemp.push(sel.value);
+  sel.value = '';
+  renderCMCoTechsList();
+}
+
+function removeCMCoTech(name) {
+  _cmCoTechsTemp = _cmCoTechsTemp.filter(n=>n!==name);
+  renderCMCoTechsList();
+}
+
 function openRepairManageDrawer(cmId) {
   const r = DB.repairs.find(x=>x.id===cmId);
   if(!r) return;
   activeRepairId = cmId;
   document.getElementById('drm-title').textContent = `จัดการงานซ่อม ${r.id}`;
   document.getElementById('drm-sub').textContent = `${r.device} (${r.devId}) · แจ้งเมื่อ ${r.date}`;
-  
+
   document.getElementById('drm-tech').value = r.tech || '';
   document.getElementById('drm-status').value = r.status || 'รอรับงาน';
   document.getElementById('drm-cause').value = r.cause || '';
-  document.getElementById('drm-parts').value = r.parts || '';
   document.getElementById('drm-cost').value = r.cost || '';
   document.getElementById('drm-progress').value = '';
   document.getElementById('drm-escalation').value = '';
   document.getElementById('drm-pin').value = '';
-  
+
+  // Init parts list (support old string format for backward compat)
+  _cmPartsTemp = Array.isArray(r.partsUsed) ? r.partsUsed.map(p=>({...p})) : [];
+
+  // Init co-techs
+  _cmCoTechsTemp = Array.isArray(r.coTechs) ? [...r.coTechs] : [];
+
+  // Populate parts select from inventory
+  const partsSel = document.getElementById('drm-parts-sel');
+  if(partsSel) {
+    partsSel.innerHTML = '<option value="">-- เลือกอะไหล่จากคลัง --</option>'
+      + DB.spareParts.map(p =>
+          `<option value="${p.id}"${p.qty===0?' disabled':''}>
+            ${p.name} (${p.partNo}) — คลัง: ${p.qty} ${p.unit}${p.qty===0?' [หมด]':''}
+          </option>`
+        ).join('');
+  }
+
+  // Populate co-tech select
+  const ctSel = document.getElementById('drm-cotech-sel');
+  if(ctSel) {
+    ctSel.innerHTML = '<option value="">-- เลือกช่างร่วมซ่อม --</option>'
+      + DB.settings.technician.map(t => `<option value="${t}">${t}</option>`).join('');
+  }
+
+  renderCMPartsList();
+  renderCMCoTechsList();
   openDrawer('drawer-repair-manage');
 }
 
 function updateRepairTicket() {
   const pin = document.getElementById('drm-pin').value;
   if(!pin || pin.length < 4) { toast('กรุณาลงนาม e-Signature ด้วย PIN 4 หลัก', 'amber'); return; }
+  const user = DB.users.find(u=>u.pin===pin && u.active);
+  if(!user) { toast('PIN ไม่ถูกต้อง','red'); return; }
 
   const r = DB.repairs.find(x=>x.id===activeRepairId);
   if(!r) return;
-  
-  r.tech = document.getElementById('drm-tech').value;
-  r.status = document.getElementById('drm-status').value;
-  r.cause = document.getElementById('drm-cause').value;
-  r.parts = document.getElementById('drm-parts').value;
-  r.cost = parseFloat(document.getElementById('drm-cost').value) || 0;
+
+  // Check stock before deducting
+  for(const p of _cmPartsTemp) {
+    const sp = DB.spareParts.find(x=>x.id===p.spId);
+    if(sp && p.qty > sp.qty) {
+      toast(`อะไหล่ "${p.name}" ในคลังมีเพียง ${sp.qty} ${sp.unit} — กรุณาปรับจำนวน`,'red');
+      return;
+    }
+  }
+
+  r.tech      = document.getElementById('drm-tech').value;
+  r.status    = document.getElementById('drm-status').value;
+  r.cause     = document.getElementById('drm-cause').value;
+  r.cost      = parseFloat(document.getElementById('drm-cost').value) || 0;
+  r.partsUsed = _cmPartsTemp.map(p=>({...p}));
+  r.coTechs   = [..._cmCoTechsTemp];
+  r.parts     = _cmPartsTemp.map(p=>`${p.name} x${p.qty}`).join(', ');
   const escalation = document.getElementById('drm-escalation').value;
-  
+
+  // Deduct spare parts stock and record transactions
+  _cmPartsTemp.forEach(pt => {
+    const sp = DB.spareParts.find(x=>x.id===pt.spId);
+    if(sp) {
+      const balBefore = sp.qty;
+      sp.qty = Math.max(0, sp.qty - pt.qty);
+      sp.lastUpdated = new Date().toLocaleDateString('th-TH');
+      addSpareTransaction(
+        sp.id, 'จ่ายออก', -pt.qty, balBefore, sp.qty,
+        r.id,
+        `ซ่อม ${r.device} (${r.devId})`,
+        user.name
+      );
+    }
+  });
+
   if(r.status === 'ส่งซ่อมภายนอก') r.ext = true;
   if(r.status === 'ซ่อมเสร็จ') {
     const asset = DB.assets.find(a=>a.id===r.devId);
     if(asset) asset.status = 'พร้อมใช้';
     renderAssetsTable();
   }
-  
-  addAuditLog('CM', r.tech||currentUserName(), 'บันทึกงานซ่อม '+r.id+' (e-Signed)', `สถานะ: ${r.status} ${escalation?'· Escalate: '+escalation:''}`);
+
+  const allTechs = [r.tech, ..._cmCoTechsTemp].filter(Boolean).join(', ');
+  addAuditLog('CM', user.name,
+    'บันทึกงานซ่อม '+r.id+' (e-Signed)',
+    `สถานะ: ${r.status} | ช่าง: ${allTechs}${r.parts?' | อะไหล่: '+r.parts:''}${escalation?' | Escalate: '+escalation:''}`
+  );
+  saveDB();
   closeDrawer();
   renderRepairTable();
-  toast('อัปเดตข้อมูลงานซ่อม '+r.id+' สำเร็จ','teal');
+  if(typeof renderSpareTable==='function') renderSpareTable();
+  toast('อัปเดตงานซ่อม '+r.id+' สำเร็จ ('+user.name+')','teal');
 }
 
 /* ════════════════════════════════
    PM CREATE
 ════════════════════════════════ */
+function onPMCreateDeviceChange() {
+  const devId = document.getElementById('pm-create-device').value;
+  const asset = DB.assets.find(a=>a.id===devId);
+  const typeRow = document.getElementById('pm-caltype-row');
+  const caltypeInput = document.getElementById('pm-create-caltype');
+  const typeSel = document.getElementById('pm-create-type');
+  if(asset && asset.calType) {
+    caltypeInput.value = asset.calType;
+    typeSel.value = 'สอบเทียบ (Calibration)';
+    if(typeRow) typeRow.style.display = 'block';
+  } else {
+    if(caltypeInput) caltypeInput.value = '';
+    if(typeRow && typeSel.value !== 'สอบเทียบ (Calibration)') typeRow.style.display = 'none';
+  }
+}
+
+function onPMCreateTypeChange() {
+  const typeSel = document.getElementById('pm-create-type');
+  const typeRow = document.getElementById('pm-caltype-row');
+  const caltypeInput = document.getElementById('pm-create-caltype');
+  if(!typeRow) return;
+  if(typeSel.value === 'สอบเทียบ (Calibration)') {
+    typeRow.style.display = 'block';
+    if(!caltypeInput.value) {
+      const devId = document.getElementById('pm-create-device').value;
+      const asset = DB.assets.find(a=>a.id===devId);
+      if(asset && asset.calType) caltypeInput.value = asset.calType;
+    }
+  } else {
+    typeRow.style.display = 'none';
+  }
+}
+
 function openPMCreateDrawer() {
+  _pmEditId = null;
+  resetPMCreateDrawer();
+
   const devSel = document.getElementById('pm-create-device');
   if(devSel) devSel.innerHTML = '<option value="">-- เลือกอุปกรณ์ --</option>'+DB.assets.map(a=>`<option value="${a.id}">${a.name} (${a.id})</option>`).join('');
 
@@ -1213,24 +1498,31 @@ function openPMCreateDrawer() {
 
   document.getElementById('pm-create-type').value = 'PM (IPM)';
   document.getElementById('pm-create-due').value = '';
+  const ct = document.getElementById('pm-create-caltype');
+  if(ct) ct.value = '';
+  const tr = document.getElementById('pm-caltype-row');
+  if(tr) tr.style.display = 'none';
   openDrawer('drawer-pm-create');
 }
 
 function submitPMPlan() {
-  const devId = document.getElementById('pm-create-device').value;
-  const type = document.getElementById('pm-create-type').value;
-  const dueRaw = document.getElementById('pm-create-due').value;
-  const resp = document.getElementById('pm-create-resp').value;
+  const devId   = document.getElementById('pm-create-device').value;
+  const type    = document.getElementById('pm-create-type').value;
+  const dueRaw  = document.getElementById('pm-create-due').value;
+  const resp    = document.getElementById('pm-create-resp').value;
+  const calType = (document.getElementById('pm-create-caltype')||{}).value||'';
 
   if(!devId || !dueRaw) { toast('กรุณาเลือกอุปกรณ์และกำหนดการ', 'red'); return; }
 
   const asset = DB.assets.find(a=>a.id===devId);
-  const woId = 'WO-' + Math.floor(Math.random()*9000+1000);
+  const woId = nextDocId('pm');
   const dueThai = formatDateThai(dueRaw);
+  const kind = type.includes('สอบเทียบ') ? 'cal' : 'pm';
 
   DB.pmList.unshift({
     id: woId, devId: asset.id, device: asset.name,
-    type: type, due: dueThai, resp: resp || 'รอดำเนินการ',
+    type: type, calType: calType||undefined,
+    kind, due: dueThai, resp: resp || 'รอดำเนินการ',
     status: 'รอดำเนินการ', result: '', cost: 0
   });
 
@@ -1240,6 +1532,95 @@ function submitPMPlan() {
   renderPMTable();
   renderPMCalendar();
   toast('สร้างแผนงาน '+woId+' สำเร็จ', 'teal');
+}
+
+function thaiDateToISO(thaiDate) {
+  if(!thaiDate || thaiDate === '—') return '';
+  const months = {'ม.ค.':1,'ก.พ.':2,'มี.ค.':3,'เม.ย.':4,'พ.ค.':5,'มิ.ย.':6,'ก.ค.':7,'ส.ค.':8,'ก.ย.':9,'ต.ค.':10,'พ.ย.':11,'ธ.ค.':12};
+  const parts = thaiDate.trim().split(/\s+/);
+  if(parts.length < 3) return '';
+  const day = parseInt(parts[0]);
+  const mon = months[parts[1]];
+  const yr  = parseInt(parts[2]) + (parseInt(parts[2]) < 100 ? 2500 : 0) - 543;
+  if(!day || !mon || isNaN(yr)) return '';
+  return `${yr}-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+
+let _pmEditId = null;
+function openPMEditPlanDrawer(pmId) {
+  const p = DB.pmList.find(x=>x.id===pmId);
+  if(!p) return;
+  _pmEditId = pmId;
+
+  // Populate selects
+  const devSel = document.getElementById('pm-create-device');
+  devSel.innerHTML = '<option value="">-- เลือกอุปกรณ์ --</option>'+DB.assets.map(a=>`<option value="${a.id}"${a.id===p.devId?' selected':''}>${a.name} (${a.id})</option>`).join('');
+
+  const respSel = document.getElementById('pm-create-resp');
+  respSel.innerHTML = '<option value="">-- ระบุช่างหรือหน่วยงาน --</option>'+DB.settings.technician.map(t=>`<option value="${t}"${t===p.resp?' selected':''}>${t}</option>`).join('')+'<option value="NIMT"'+(p.resp==='NIMT'?' selected':'')+'>NIMT</option><option value="หน่วยงานภายนอก"'+(p.resp==='หน่วยงานภายนอก'?' selected':'')+'>หน่วยงานภายนอก</option>';
+
+  document.getElementById('pm-create-type').value = p.type || 'PM (IPM)';
+  document.getElementById('pm-create-due').value  = thaiDateToISO(p.due);
+  const caltypeInp = document.getElementById('pm-create-caltype');
+  const caltypeRow = document.getElementById('pm-caltype-row');
+  if(caltypeInp) caltypeInp.value = p.calType || '';
+  if(caltypeRow) caltypeRow.style.display = (p.type||'').includes('สอบเทียบ') ? 'block' : 'none';
+
+  // Switch drawer to edit mode
+  document.querySelector('#drawer-pm-create .drawer-title').textContent = 'แก้ไขแผนบำรุงรักษา/สอบเทียบ';
+  document.querySelector('#drawer-pm-create .drawer-sub').textContent   = `${p.id} · ${p.device} (${p.devId})`;
+  const footBtns = document.querySelector('#drawer-pm-create .drawer-foot');
+  footBtns.innerHTML = `<button class="btn" onclick="closeDrawer();_pmEditId=null;resetPMCreateDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="updatePMPlan()">บันทึกการแก้ไข</button>`;
+
+  openDrawer('drawer-pm-create');
+}
+
+function resetPMCreateDrawer() {
+  document.querySelector('#drawer-pm-create .drawer-title').textContent = 'สร้างแผนบำรุงรักษา/สอบเทียบ';
+  document.querySelector('#drawer-pm-create .drawer-sub').textContent   = 'สร้าง Work Order ใหม่';
+  const footBtns = document.querySelector('#drawer-pm-create .drawer-foot');
+  footBtns.innerHTML = `<button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="submitPMPlan()">สร้างแผนงาน</button>`;
+}
+
+function updatePMPlan() {
+  const devId   = document.getElementById('pm-create-device').value;
+  const type    = document.getElementById('pm-create-type').value;
+  const dueRaw  = document.getElementById('pm-create-due').value;
+  const resp    = document.getElementById('pm-create-resp').value;
+  const calType = (document.getElementById('pm-create-caltype')||{}).value||'';
+
+  if(!devId || !dueRaw) { toast('กรุณาเลือกอุปกรณ์และกำหนดการ','red'); return; }
+
+  const p = DB.pmList.find(x=>x.id===_pmEditId);
+  if(!p) return;
+  const asset = DB.assets.find(a=>a.id===devId);
+  const dueThai = formatDateThai(dueRaw);
+
+  const changed = [];
+  if(p.devId    !== devId)   changed.push(`อุปกรณ์: ${p.devId}→${devId}`);
+  if(p.type     !== type)    changed.push(`ประเภทงาน: ${p.type}→${type}`);
+  if(p.due      !== dueThai) changed.push(`กำหนดการ: ${p.due}→${dueThai}`);
+  if(p.resp     !== resp)    changed.push(`ผู้รับผิดชอบ: ${p.resp}→${resp}`);
+  if((p.calType||'') !== calType) changed.push(`ประเภทสอบเทียบ: ${p.calType||'—'}→${calType||'—'}`);
+
+  p.devId   = asset.id;
+  p.device  = asset.name;
+  p.type    = type;
+  p.calType = calType || undefined;
+  p.due     = dueThai;
+  p.resp    = resp || p.resp;
+  p.kind    = type.includes('สอบเทียบ') ? 'cal' : 'pm';
+
+  addAuditLog('PM', currentUserName(), `แก้ไขแผนงาน ${p.id}`, changed.join(' | ') || 'ไม่มีการเปลี่ยนแปลง');
+
+  _pmEditId = null;
+  resetPMCreateDrawer();
+  closeDrawer();
+  renderPMTable();
+  renderPMCalendar();
+  toast(`อัปเดตแผนงาน ${p.id} สำเร็จ`, 'teal');
 }
 
 /* ════════════════════════════════
@@ -1332,17 +1713,28 @@ function renderPMTable() {
     tb.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">ไม่มีรายการ</td></tr>';
     return;
   }
-  tb.innerHTML = rows.map(p => `
-    <tr onclick="openPMManageDrawer('${p.id}')">
+  tb.innerHTML = rows.map(p => {
+    const isDone = p.status === 'เสร็จสิ้น';
+    const certBtn = (p.kind === 'cal' && isDone && !p.certNo)
+      ? `<button class="btn btn-sm" style="border-color:var(--blue);color:var(--blue);margin-left:4px" onclick="event.stopPropagation();linkCalCert('${p.id}')">ผูก Cert</button>`
+      : (p.certNo ? `<span class="badge blue" style="margin-left:4px" title="Cert: ${p.certNo}">${p.certNo}</span>` : '');
+    const signedInfo = isDone && p.signedBy
+      ? `<div style="font-size:10px;color:var(--text3);margin-top:2px">ลงนาม: ${p.signedBy}${p.lastEditedAt?' · '+p.lastEditedAt:''}</div>`
+      : '';
+    const actionBtn = isDone
+      ? `<button class="btn btn-sm" style="border-color:var(--teal);color:var(--teal)" onclick="event.stopPropagation();openPMManageDrawer('${p.id}')">ดูผล</button>`
+      : `<button class="btn btn-sm" style="border-color:var(--amber);color:var(--amber)" onclick="event.stopPropagation();openPMEditPlanDrawer('${p.id}')">แก้ไขแผน</button>
+         <button class="btn btn-sm btn-teal" style="margin-left:4px" onclick="event.stopPropagation();openPMManageDrawer('${p.id}')">บันทึกผล</button>`;
+    return `<tr onclick="openPMManageDrawer('${p.id}')">
       <td class="mid">${p.id}</td>
       <td class="fw">${p.device} <span class="mid">${p.devId}</span></td>
       <td>${p.type}</td>
-      <td style="${p.status==='รอดำเนินการ'?'color:var(--amber);font-weight:600':''}">${p.due}</td>
-      <td>${p.resp}</td>
-      <td>${p.status==='เสร็จสิ้น'?'<span class="badge green">เสร็จสิ้น</span>':'<span class="badge amber">รอดำเนินการ</span>'}</td>
-      <td><button class="btn btn-sm" onclick="event.stopPropagation();openPMManageDrawer('${p.id}')">บันทึกผล</button></td>
-    </tr>
-  `).join('');
+      <td style="${!isDone?'color:var(--amber);font-weight:600':''}">${p.due}</td>
+      <td>${p.resp}${signedInfo}</td>
+      <td>${isDone?'<span class="badge green">เสร็จสิ้น</span>':'<span class="badge amber">รอดำเนินการ</span>'}${certBtn}</td>
+      <td>${actionBtn}</td>
+    </tr>`;
+  }).join('');
 }
 
 function togglePMView(view) {
@@ -1382,55 +1774,302 @@ function openPMManageDrawer(pmId) {
   const p = DB.pmList.find(x=>x.id===pmId);
   if(!p) return;
   activePMId = pmId;
-  document.getElementById('dpm-title').textContent = `บันทึกผล ${p.type}`;
-  document.getElementById('dpm-sub').textContent = `${p.id} · ${p.device} (${p.devId}) · กำหนดการ: ${p.due}`;
-  
-  document.getElementById('dpm-status').value = p.status || 'รอดำเนินการ';
-  document.getElementById('dpm-result').value = p.result || '';
-  document.getElementById('dpm-cost').value = p.cost || '';
-  document.getElementById('dpm-resp').value = p.resp || '';
-  document.getElementById('dpm-before').value = '';
-  document.getElementById('dpm-after').value = '';
-  document.getElementById('dpm-trace').value = '';
-  document.getElementById('dpm-pin').value = '';
-  
-  // Show history
-  const history = DB.pmList.filter(x => x.devId === p.devId && x.id !== p.id && x.status === 'เสร็จสิ้น');
-  let histHtml = `<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">ประวัติการบำรุงรักษา (PM/Cal History)</div>`;
-  if(history.length) {
-    histHtml += history.map(h => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="display:flex;justify-content:space-between"><span class="fw">${h.type}</span> <span>${h.due}</span></div><div style="color:var(--text2);margin-top:2px">ผล: ${h.result||'-'} | ผู้ดำเนินการ: ${h.resp}</div></div>`).join('');
+  document.getElementById('dpm-title').textContent = `${p.id} — ${p.type}`;
+  document.getElementById('dpm-sub').textContent   = `${p.device} (${p.devId}) · กำหนดการ: ${p.due}`;
+  if(p.status === 'เสร็จสิ้น') {
+    renderPMReadOnlyView(p);
   } else {
-    histHtml += `<div style="font-size:12px;color:var(--text3)">ไม่มีประวัติย้อนหลัง</div>`;
+    renderPMEditForm(p);
   }
-  document.getElementById('dpm-history').innerHTML = histHtml;
-
-  // Render device-specific PM checklist
-  const asset = DB.assets.find(a => a.id === p.devId);
-  renderPMChecklist(asset ? asset.category : '_default');
-
   openDrawer('drawer-pm-manage');
 }
 
-function updatePMTicket() {
-  const pin = document.getElementById('dpm-pin').value;
-  if(!pin || pin.length < 4) { toast('กรุณาลงนาม e-Signature ด้วย PIN 4 หลัก', 'amber'); return; }
+function renderPMHistoryHtml(p) {
+  const history = DB.pmList.filter(x => x.devId === p.devId && x.id !== p.id && x.status === 'เสร็จสิ้น');
+  let h = '<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">PM/Cal History</div>';
+  if(history.length) {
+    h += history.map(x => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="display:flex;justify-content:space-between"><span class="fw">${x.type}</span><span>${x.due}</span></div><div style="color:var(--text2);margin-top:2px">ผล: ${x.result||'-'} | ${x.resp}</div></div>`).join('');
+  } else {
+    h += '<div style="font-size:12px;color:var(--text3)">ไม่มีประวัติ</div>';
+  }
+  return h;
+}
 
+function renderPMChecklistReadOnly(checklistData) {
+  if(!checklistData || !checklistData.length) return '<div style="font-size:12px;color:var(--text3)">ไม่มีข้อมูล Checklist</div>';
+  const checks   = checklistData.filter(x=>x.type==='check');
+  const measures = checklistData.filter(x=>x.type==='measure');
+  let html = '';
+  if(checks.length) {
+    html += '<div style="display:grid;gap:4px">' + checks.map(x =>
+      `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
+        <span style="width:18px;height:18px;border-radius:4px;background:${x.value==='pass'?'var(--teal)':'var(--surface2)'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          ${x.value==='pass'?'<svg viewBox="0 0 10 8" style="width:10px;stroke:#fff;fill:none;stroke-width:2"><path d="M1 4l3 3 5-6"/></svg>':''}
+        </span>
+        <span>${x.label||x.id}</span>
+      </div>`).join('') + '</div>';
+  }
+  if(measures.length) {
+    html += '<div style="margin-top:8px;display:grid;gap:4px">' + measures.map(x =>
+      `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--text2)">${x.label||x.id}</span>
+        <span class="fw">${x.value||'—'}</span>
+      </div>`).join('') + '</div>';
+  }
+  return html;
+}
+
+function renderPMReadOnlyView(p) {
+  const corrCount = (p.corrections||[]).length;
+  const drawerBody = document.querySelector('#drawer-pm-manage .drawer-body');
+  const drawerFoot = document.querySelector('#drawer-pm-manage .drawer-foot');
+
+  let corrHtml = '';
+  if(corrCount) {
+    corrHtml = `<div style="margin-top:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">Correction Notes (${corrCount})</div>
+      ${(p.corrections||[]).map((c,i) => `
+        <div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span class="fw" style="color:var(--amber)">Correction #${i+1}</span>
+            <span style="color:var(--text3)">${c.at} · ${c.by}</span>
+          </div>
+          <div style="color:var(--text2);margin-bottom:6px"><strong>เหตุผล:</strong> ${c.reason}</div>
+          ${c.changes.map(ch=>`<div style="font-size:11px;color:var(--text3);padding:2px 0">${ch.field}: <span style="text-decoration:line-through;color:var(--red)">${ch.from||'—'}</span> → <span style="color:var(--teal)">${ch.to||'—'}</span></div>`).join('')}
+        </div>`).join('')}
+    </div>`;
+  }
+
+  drawerBody.innerHTML = `
+    <div style="background:rgba(5,178,122,.08);border:1px solid rgba(5,178,122,.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <svg viewBox="0 0 16 16" style="width:16px;height:16px;stroke:var(--teal);fill:none;stroke-width:2;flex-shrink:0"><circle cx="8" cy="8" r="7"/><path d="M8 11V8m0-3h.01"/></svg>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--teal)">บันทึกเสร็จสิ้น — ล็อกระเบียนแล้ว (ISO 13485 §4.2.4)</div>
+        <div style="font-size:11px;color:var(--teal);margin-top:2px">ลงนามโดย ${p.signedBy||'—'} เมื่อ ${p.signedAt||p.due}${corrCount?' · แก้ไขแล้ว '+corrCount+' ครั้ง':''}</div>
+      </div>
+    </div>
+    <div class="form-row col2" style="pointer-events:none;opacity:.85">
+      <div class="ff"><label class="flabel">สถานะงาน</label><div class="finput" style="background:var(--surface2)">${p.status}</div></div>
+      <div class="ff"><label class="flabel">ผลการตรวจสอบ</label><div class="finput" style="background:var(--surface2)">${p.result||'—'}</div></div>
+      <div class="ff"><label class="flabel">ค่าก่อนปรับตั้ง (As Found)</label><div class="finput" style="background:var(--surface2)">${p.before||'—'}</div></div>
+      <div class="ff"><label class="flabel">ค่าหลังปรับตั้ง (As Left)</label><div class="finput" style="background:var(--surface2)">${p.after||'—'}</div></div>
+      <div class="ff span2"><label class="flabel">Traceability (NIMT)</label><div class="finput" style="background:var(--surface2)">${p.trace||'—'}</div></div>
+      <div class="ff"><label class="flabel">ค่าใช้จ่าย (บาท)</label><div class="finput" style="background:var(--surface2)">${p.cost||'0'}</div></div>
+      <div class="ff"><label class="flabel">ผู้ดำเนินการ</label><div class="finput" style="background:var(--surface2)">${p.resp||'—'}</div></div>
+    </div>
+    <div style="margin-top:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">Checklist</div>
+      ${renderPMChecklistReadOnly(p.checklistData)}
+    </div>
+    ${corrHtml}
+    <div style="margin-top:16px">${renderPMHistoryHtml(p)}</div>
+  `;
+
+  drawerFoot.innerHTML = `
+    <button class="btn" onclick="closeDrawer()">ปิด</button>
+    <button class="btn" style="border-color:var(--amber);color:var(--amber)" onclick="openPMCorrectionForm('${p.id}')">
+      <svg viewBox="0 0 16 16" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;margin-right:4px;vertical-align:middle"><path d="M10 2l4 4-8 8H2v-4z"/></svg>ขอแก้ไข (Correction Note)
+    </button>
+  `;
+}
+
+function renderPMEditForm(p) {
+  const drawerBody = document.querySelector('#drawer-pm-manage .drawer-body');
+  const drawerFoot = document.querySelector('#drawer-pm-manage .drawer-foot');
+
+  drawerBody.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">แก้ไข / บันทึกผลการดำเนินงาน</div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">สถานะงาน</label><select class="finput" id="dpm-status" onchange="toggleDpmPinSection()"><option>รอดำเนินการ</option><option>เสร็จสิ้น</option><option>ยกเลิก</option></select></div>
+      <div class="ff"><label class="flabel">ผลการตรวจสอบ (Result)</label><select class="finput" id="dpm-result"><option value="">-- เลือกผล --</option><option>ผ่านเกณฑ์มาตรฐาน (Pass)</option><option>ผ่านแบบมีเงื่อนไข/ปรับตั้ง (Adjusted)</option><option>ไม่ผ่าน (Fail) - ต้องส่งซ่อม</option></select></div>
+      <div class="ff"><label class="flabel">ค่าก่อนปรับตั้ง (As Found)</label><input class="finput" id="dpm-before" placeholder="เช่น 98%"></div>
+      <div class="ff"><label class="flabel">ค่าหลังปรับตั้ง (As Left)</label><input class="finput" id="dpm-after" placeholder="เช่น 100%"></div>
+      <div class="ff span2"><label class="flabel">เครื่องมืออ้างอิง / Traceability (NIMT)</label><input class="finput" id="dpm-trace" placeholder="ระบุ S/N หรือรหัสใบรับรองของ Standard Analyzer"></div>
+      <div class="ff"><label class="flabel">ค่าใช้จ่าย (บาท)</label><input class="finput" type="number" id="dpm-cost" placeholder="0"></div>
+      <div class="ff"><label class="flabel">ผู้ดำเนินการ / บริษัทภายนอก</label><input class="finput" id="dpm-resp" placeholder="ชื่อผู้ตรวจสอบ"></div>
+      <div class="ff span2"><label class="flabel">แนบไฟล์ผลสอบเทียบ (Certificate/Report)</label><input class="finput" type="file" id="dpm-file" accept=".pdf,.jpg,.jpeg,.png"></div>
+    </div>
+    <div id="dpm-checklist-section" style="margin-top:16px"></div>
+    <div id="dpm-pin-section" style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border);display:none">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;color:var(--teal)">21 CFR Part 11 — Electronic Signature</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">จำเป็นเฉพาะเมื่อตั้งสถานะ "เสร็จสิ้น" เพื่อล็อกระเบียน</div>
+      <div style="display:flex;gap:8px"><input type="password" class="finput" id="dpm-pin" placeholder="กรอก PIN 4 หลักเพื่อลงนามยืนยัน" autocomplete="new-password"></div>
+    </div>
+    <div id="dpm-history" style="margin-top:20px;"></div>
+  `;
+
+  drawerFoot.innerHTML = `
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="updatePMTicket()">บันทึกข้อมูล</button>
+  `;
+
+  document.getElementById('dpm-status').value = p.status || 'รอดำเนินการ';
+  document.getElementById('dpm-result').value = p.result || '';
+  document.getElementById('dpm-cost').value   = p.cost   || '';
+  document.getElementById('dpm-resp').value   = p.resp   || '';
+  document.getElementById('dpm-before').value = p.before || '';
+  document.getElementById('dpm-after').value  = p.after  || '';
+  document.getElementById('dpm-trace').value  = p.trace  || '';
+  document.getElementById('dpm-pin').value    = '';
+  toggleDpmPinSection();
+
+  const asset = DB.assets.find(a => a.id === p.devId);
+  renderPMChecklist(asset ? asset.category : '_default');
+  if(p.checklistData && p.checklistData.length) restorePMChecklistData(p.checklistData);
+
+  let histHtml = '<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">ประวัติการบำรุงรักษา (PM/Cal History)</div>';
+  const history = DB.pmList.filter(x => x.devId === p.devId && x.id !== p.id && x.status === 'เสร็จสิ้น');
+  if(history.length) {
+    histHtml += history.map(h => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="display:flex;justify-content:space-between"><span class="fw">${h.type}</span><span>${h.due}</span></div><div style="color:var(--text2);margin-top:2px">ผล: ${h.result||'-'} | ผู้ดำเนินการ: ${h.resp}</div></div>`).join('');
+  } else {
+    histHtml += '<div style="font-size:12px;color:var(--text3)">ไม่มีประวัติย้อนหลัง</div>';
+  }
+  document.getElementById('dpm-history').innerHTML = histHtml;
+}
+
+function restorePMChecklistData(checklistData) {
+  const container = document.getElementById('dpm-checklist-section');
+  if(!container || !checklistData) return;
+  checklistData.forEach(item => {
+    if(item.type === 'check') {
+      const row = container.querySelector(`.chk-row[data-id="${item.id}"]`);
+      if(row && item.value === 'pass' && !row.classList.contains('checked')) toggleDpmChk(row);
+    } else if(item.type === 'measure') {
+      const inp = container.querySelector(`input[data-measure="${item.id}"]`);
+      if(inp && item.value !== undefined) inp.value = item.value;
+    }
+  });
+  updateDpmChkProgress();
+}
+
+function toggleDpmPinSection() {
+  const sel = document.getElementById('dpm-status');
+  const sec = document.getElementById('dpm-pin-section');
+  if(!sel || !sec) return;
+  sec.style.display = sel.value === 'เสร็จสิ้น' ? 'block' : 'none';
+}
+
+function updatePMTicket() {
+  const newStatus = document.getElementById('dpm-status').value;
   const p = DB.pmList.find(x=>x.id===activePMId);
   if(!p) return;
-  p.status = document.getElementById('dpm-status').value;
-  p.result = document.getElementById('dpm-result').value;
-  p.cost = parseFloat(document.getElementById('dpm-cost').value) || 0;
-  p.resp = document.getElementById('dpm-resp').value;
-  const before = document.getElementById('dpm-before').value;
-  const after = document.getElementById('dpm-after').value;
-  
+
+  let signedUser = null;
+  if(newStatus === 'เสร็จสิ้น') {
+    const pin = document.getElementById('dpm-pin').value;
+    if(!pin || pin.length < 4) { toast('กรุณาลงนาม e-Signature ด้วย PIN 4 หลักก่อนบันทึกเสร็จสิ้น','amber'); return; }
+    signedUser = DB.users.find(u => u.pin === pin && u.active);
+    if(!signedUser) { toast('PIN ไม่ถูกต้อง — ไม่สามารถลงนามได้','red'); return; }
+  }
+
+  p.status        = newStatus;
+  p.result        = document.getElementById('dpm-result').value;
+  p.cost          = parseFloat(document.getElementById('dpm-cost').value)||0;
+  p.resp          = document.getElementById('dpm-resp').value;
+  p.before        = document.getElementById('dpm-before').value.trim();
+  p.after         = document.getElementById('dpm-after').value.trim();
+  p.trace         = document.getElementById('dpm-trace').value.trim();
+  p.lastEditedAt  = new Date().toLocaleString('th-TH');
   p.checklistData = collectPMChecklistData();
-  const detailStr = `ผล: ${p.result||'-'} ${before||after?'(As Found: '+before+' → As Left: '+after+')':''}`;
-  addAuditLog('PM', currentUserName(), 'บันทึกผล '+p.id+' (e-Signed)', detailStr);
+
+  if(signedUser) {
+    p.signedBy = signedUser.name;
+    p.signedAt = new Date().toLocaleString('th-TH');
+    const detail = `ผล: ${p.result||'-'}`+(p.before||p.after?` · As Found: ${p.before||'—'} → As Left: ${p.after||'—'}`:'')+( p.trace?` · Ref: ${p.trace}`:'');
+    addAuditLog(p.kind==='cal'?'CAL':'PM', signedUser.name, 'บันทึกผล '+p.id+' (e-Signed)', detail);
+    closeDrawer();
+    renderPMTable();
+    renderPMCalendar();
+    toast('บันทึกและล็อกระเบียน '+p.id+' สำเร็จ (ลงนามโดย '+signedUser.name+')','teal');
+  } else {
+    addAuditLog(p.kind==='cal'?'CAL':'PM', STATE.currentUser||'—', 'แก้ไขข้อมูล '+p.id+' (draft)', `สถานะ: ${p.status}`);
+    closeDrawer();
+    renderPMTable();
+    renderPMCalendar();
+    toast('บันทึกการแก้ไข '+p.id+' สำเร็จ','teal');
+  }
+}
+
+function openPMCorrectionForm(pmId) {
+  const p = DB.pmList.find(x=>x.id===pmId);
+  if(!p) return;
+  activePMId = pmId;
+  const drawerBody = document.querySelector('#drawer-pm-manage .drawer-body');
+  const drawerFoot = document.querySelector('#drawer-pm-manage .drawer-foot');
+
+  drawerBody.innerHTML = `
+    <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:10px 14px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--amber)">Correction Note — ${p.id}</div>
+      <div style="font-size:11px;color:var(--amber);margin-top:2px">ระเบียนต้นฉบับยังคงอยู่ ระบบจะบันทึก Correction Note แยกต่างหาก (21 CFR Part 11 §11.10(e))</div>
+    </div>
+    <div class="ff" style="margin-bottom:12px">
+      <label class="flabel">เหตุผลในการแก้ไข <span class="req">*</span></label>
+      <input class="finput" id="corr-reason" placeholder="ระบุเหตุผลที่ต้องแก้ไขข้อมูล (บังคับ)" autocomplete="off">
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">ข้อมูลที่ต้องการแก้ไข (ระบุเฉพาะที่เปลี่ยนแปลง)</div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">ผลการตรวจสอบ</label><select class="finput" id="corr-result"><option value="">-- ไม่เปลี่ยน --</option><option>ผ่านเกณฑ์มาตรฐาน (Pass)</option><option>ผ่านแบบมีเงื่อนไข/ปรับตั้ง (Adjusted)</option><option>ไม่ผ่าน (Fail) - ต้องส่งซ่อม</option></select></div>
+      <div class="ff"><label class="flabel">ผู้ดำเนินการ</label><input class="finput" id="corr-resp" placeholder="ไม่เปลี่ยน (เว้นว่าง)"></div>
+      <div class="ff"><label class="flabel">ค่าก่อนปรับตั้ง (As Found)</label><input class="finput" id="corr-before" placeholder="ไม่เปลี่ยน (เว้นว่าง)"></div>
+      <div class="ff"><label class="flabel">ค่าหลังปรับตั้ง (As Left)</label><input class="finput" id="corr-after" placeholder="ไม่เปลี่ยน (เว้นว่าง)"></div>
+      <div class="ff span2"><label class="flabel">Traceability (NIMT)</label><input class="finput" id="corr-trace" placeholder="ไม่เปลี่ยน (เว้นว่าง)"></div>
+      <div class="ff"><label class="flabel">ค่าใช้จ่าย (บาท)</label><input class="finput" type="number" id="corr-cost" placeholder="ไม่เปลี่ยน (เว้นว่าง)"></div>
+    </div>
+    <div style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--teal)">21 CFR Part 11 — Electronic Signature</div>
+      <div style="display:flex;gap:8px"><input type="password" class="finput" id="corr-pin" placeholder="กรอก PIN เพื่อยืนยัน Correction Note" autocomplete="new-password"></div>
+    </div>
+  `;
+
+  drawerFoot.innerHTML = `
+    <button class="btn" onclick="openPMManageDrawer('${p.id}')">← กลับ</button>
+    <button class="btn" style="border-color:var(--amber);color:var(--amber)" onclick="savePMCorrection()">บันทึก Correction Note</button>
+  `;
+}
+
+function savePMCorrection() {
+  const reason = (document.getElementById('corr-reason')||{}).value||'';
+  if(!reason.trim()) { toast('กรุณาระบุเหตุผลในการแก้ไข','amber'); return; }
+  const pin = (document.getElementById('corr-pin')||{}).value||'';
+  if(!pin || pin.length < 4) { toast('กรุณาลงนาม e-Signature ด้วย PIN 4 หลัก','amber'); return; }
+  const user = DB.users.find(u => u.pin === pin && u.active);
+  if(!user) { toast('PIN ไม่ถูกต้อง','red'); return; }
+  const p = DB.pmList.find(x=>x.id===activePMId);
+  if(!p) return;
+
+  const changes = [];
+  const newResult  = document.getElementById('corr-result').value;
+  const newResp    = document.getElementById('corr-resp').value.trim();
+  const newBefore  = document.getElementById('corr-before').value.trim();
+  const newAfter   = document.getElementById('corr-after').value.trim();
+  const newTrace   = document.getElementById('corr-trace').value.trim();
+  const newCostRaw = document.getElementById('corr-cost').value.trim();
+
+  if(newResult)       { changes.push({field:'ผลการตรวจสอบ', from:p.result||'', to:newResult}); p.result=newResult; }
+  if(newResp)         { changes.push({field:'ผู้ดำเนินการ',  from:p.resp||'',   to:newResp});   p.resp=newResp; }
+  if(newBefore)       { changes.push({field:'As Found',      from:p.before||'', to:newBefore}); p.before=newBefore; }
+  if(newAfter)        { changes.push({field:'As Left',       from:p.after||'',  to:newAfter});  p.after=newAfter; }
+  if(newTrace)        { changes.push({field:'Traceability',  from:p.trace||'',  to:newTrace});  p.trace=newTrace; }
+  if(newCostRaw!=='') {
+    const newCost = parseFloat(newCostRaw)||0;
+    changes.push({field:'ค่าใช้จ่าย', from:String(p.cost||0), to:String(newCost)});
+    p.cost = newCost;
+  }
+
+  if(!changes.length) { toast('ไม่มีข้อมูลที่เปลี่ยนแปลง — ระบุค่าใหม่อย่างน้อย 1 รายการ','amber'); return; }
+
+  if(!p.corrections) p.corrections = [];
+  p.corrections.push({ at:new Date().toLocaleString('th-TH'), by:user.name, reason:reason.trim(), changes });
+  p.lastEditedAt = new Date().toLocaleString('th-TH');
+
+  addAuditLog(p.kind==='cal'?'CAL':'PM', user.name,
+    `Correction Note #${p.corrections.length} — ${p.id}`,
+    `เหตุผล: ${reason} | ${changes.map(c=>`${c.field}: ${c.from}→${c.to}`).join(', ')}`);
+
   closeDrawer();
   renderPMTable();
   renderPMCalendar();
-  toast('บันทึกข้อมูล '+p.id+' สำเร็จ','teal');
+  toast(`บันทึก Correction Note #${p.corrections.length} สำเร็จ (${user.name})`, 'teal');
 }
 
 function exportPMExcel() {
@@ -1523,7 +2162,7 @@ function submitIncident() {
   if(!devId || !dateRaw || !eventDesc) { toast('กรุณาเลือกอุปกรณ์, วันที่ และระบุรายละเอียดเหตุการณ์', 'red'); return; }
 
   const asset = DB.assets.find(a=>a.id===devId);
-  const incId = 'INC-' + String(DB.incidents.length + 32).padStart(3, '0');
+  const incId = nextDocId('incident');
   const dateThai = formatDateThai(dateRaw);
 
   DB.incidents.unshift({
@@ -1730,24 +2369,59 @@ function dctRemoveDevice(assetId) {
 
 function dctRenderSelectedChips() {
   const container = document.getElementById('dct-selected-devices');
-  const hint = document.getElementById('dct-empty-hint');
   const countBadge = document.getElementById('dct-dev-count');
   if (!container) return;
+
   if (dctSelectedDeviceIds.length === 0) {
-    container.innerHTML = `<span id="dct-empty-hint" style="color:var(--text3);font-size:12px;align-self:center;width:100%;text-align:center;padding:6px 0">ยังไม่มีอุปกรณ์ที่เลือก — ค้นหาและเพิ่มได้จากช่องด้านบน</span>`;
     if (countBadge) countBadge.style.display = 'none';
+    container.style.cssText = 'min-height:56px;background:var(--surface2);border:1.5px dashed var(--border2);border-radius:var(--r);padding:12px;display:flex;align-items:center;justify-content:center';
+    container.innerHTML = `<span style="color:var(--text3);font-size:12px;text-align:center">ยังไม่มีอุปกรณ์ที่เลือก — ค้นหาและเพิ่มได้จากช่องด้านบน</span>`;
     return;
   }
+
   if (countBadge) { countBadge.textContent = dctSelectedDeviceIds.length; countBadge.style.display = 'inline'; }
-  container.innerHTML = dctSelectedDeviceIds.map(id => {
+  container.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;max-height:320px;overflow-y:auto';
+
+  const statusColor = {'พร้อมใช้':'var(--green)','ยืมออก':'var(--blue)','ส่งซ่อม':'var(--amber)','ซ่อม':'var(--amber)'};
+  const riskBg     = {'สูง':'var(--red-l)','กลาง':'var(--amber-l)','ต่ำ':'var(--green-l)'};
+  const riskFg     = {'สูง':'var(--red)','กลาง':'var(--amber)','ต่ำ':'var(--green)'};
+
+  container.innerHTML = dctSelectedDeviceIds.map((id, idx) => {
     const a = DB.assets.find(x => x.id === id);
-    const label = a ? `${a.id} — ${a.name}` : id;
-    const dept  = a ? a.dept : '';
-    return `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--teal-d);border:1px solid rgba(13,148,136,.25);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--teal);max-width:100%">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px" title="${label}">${label}</span>
-      ${dept?`<span style="font-weight:400;color:var(--teal-l);font-size:10px">(${dept})</span>`:''}
-      <span onclick="dctRemoveDevice('${id}')" title="ลบออก" style="cursor:pointer;width:16px;height:16px;border-radius:50%;background:rgba(13,148,136,.2);display:grid;place-items:center;flex-shrink:0;color:var(--teal);font-size:14px;line-height:1;transition:all .12s" onmouseover="this.style.background='var(--red)';this.style.color='#fff'" onmouseout="this.style.background='rgba(13,148,136,.2)';this.style.color='var(--teal)'">×</span>
+    if (!a) return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;${idx<dctSelectedDeviceIds.length-1?'border-bottom:1px solid var(--border);':''}font-size:12px;color:var(--text3)">
+      <span>${id} (ไม่พบข้อมูล)</span>
+      <button onclick="dctRemoveDevice('${id}')" style="border:none;background:none;cursor:pointer;color:var(--red);font-size:18px;line-height:1;padding:0 4px">×</button>
+    </div>`;
+    const sc = statusColor[a.status] || 'var(--text3)';
+    const isLast = idx === dctSelectedDeviceIds.length - 1;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;${isLast?'':'border-bottom:1px solid var(--border);'}transition:background .08s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <div style="width:36px;height:36px;border-radius:9px;background:var(--teal-d);display:grid;place-items:center;flex-shrink:0">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">
+          <span style="font-family:var(--m);color:var(--teal);font-size:12px">${a.id}</span>
+          <span style="color:var(--text3);font-weight:400;margin:0 5px">—</span>${a.name}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:3px">
+          <span style="font-family:var(--m);font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 7px;color:var(--text2)">S/N: ${a.serial||'—'}</span>
+          <span style="font-size:11px;color:var(--text2)">${[a.mfr,a.model].filter(Boolean).join(' ')}</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center">
+          <span style="font-size:11px;color:var(--text3)">📍 ${a.dept}</span>
+          <span style="color:var(--border2)">·</span>
+          <span style="font-size:11px;font-weight:600;color:${sc}">${a.status}</span>
+          ${a.risk?`<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:${riskBg[a.risk]||'var(--surface2)'};color:${riskFg[a.risk]||'var(--text3)'}">ความเสี่ยง${a.risk}</span>`:''}
+          ${a.sny?`<span style="color:var(--border2)">·</span><span style="font-size:10px;color:var(--text3)">สนย. <span style="font-family:var(--m);color:var(--text2)">${a.sny}</span></span>`:''}
+          <span style="color:var(--border2)">·</span>
+          <span style="font-size:10px;color:var(--text3)">PM <span style="color:var(--text2)">${a.pm||'—'}</span></span>
+          <span style="color:var(--border2)">·</span>
+          <span style="font-size:10px;color:var(--text3)">Cal <span style="color:var(--text2)">${a.cal||'—'}</span></span>
+        </div>
+      </div>
+      <button onclick="dctRemoveDevice('${id}')" title="นำออกจากสัญญา" style="flex-shrink:0;width:28px;height:28px;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;display:grid;place-items:center;color:var(--text3);transition:all .12s" onmouseover="this.style.background='var(--red-l)';this.style.borderColor='#fca5a5';this.style.color='var(--red)'" onmouseout="this.style.background='transparent';this.style.borderColor='var(--border)';this.style.color='var(--text3)'">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
     </div>`;
   }).join('');
 }
@@ -1818,7 +2492,7 @@ function saveContract() {
   const startDate = startIso ? new Date(startIso) : new Date();
   const startDateTh = `${startDate.getDate()} ${thMonths[startDate.getMonth()]} ${startDate.getFullYear()+543}`;
   const rec = {
-    id: editId || 'SC-' + String(DB.serviceContracts.length + 1).padStart(3,'0'),
+    id: editId || nextDocId('contract'),
     title,
     vendor,
     contactPerson: document.getElementById('dct-contact').value,
@@ -2078,7 +2752,7 @@ function saveSafetyTest() {
   const result = allPass ? 'ผ่าน (Pass)' : 'ไม่ผ่าน (Fail)';
   const editId = document.getElementById('dst-id').value;
   const rec = {
-    id: editId || 'EST-' + String(DB.safetyTests.length + 1).padStart(4,'0'),
+    id: editId || nextDocId('safety'),
     devId, device, testDate: new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'}),
     tester: document.getElementById('dst-tester').value,
     testerSerial: document.getElementById('dst-testerserial').value,
@@ -2133,7 +2807,7 @@ function _generateWOsForYear(year, kind) {
     if (kind !== 'cal') {
       for (let m = startMonth; m < 12; m += freq.pmMonths) {
         wos.push({
-          id: `WO-AUTO-${year}-${asset.id}-PM-${m+1}`,
+          id: nextDocId('pm'),
           kind: 'pm', devId: asset.id, device: asset.name,
           type: `PM ${freq.pmMonths === 3 ? '3 เดือน' : freq.pmMonths === 6 ? '6 เดือน' : '1 ปี'}`,
           due: `${1+Math.floor(m/12*28)} ${months[m%12]} ${year}`,
@@ -2144,7 +2818,7 @@ function _generateWOsForYear(year, kind) {
     if (kind !== 'pm' && freq.calMonths <= 12) {
       const calMonth = Math.min(5, 11);
       wos.push({
-        id: `CAL-AUTO-${year}-${asset.id}`,
+        id: nextDocId('cal'),
         kind: 'cal', devId: asset.id, device: asset.name,
         type: 'สอบเทียบมาตรฐานประจำปี',
         due: `30 ${months[calMonth]} ${year}`,
@@ -2189,6 +2863,69 @@ function generateAnnualPMPlan() {
 /* ════════════════════════════════
    PART 5 — SPARE PARTS INVENTORY (ISO 13485 §7.4)
 ════════════════════════════════ */
+/* ─── Spare Parts Transaction Ledger ─────────────────── */
+function addSpareTransaction(spId, type, qty, balBefore, balAfter, ref, note, by) {
+  if(!DB.spareTransactions) DB.spareTransactions = [];
+  DB.spareTransactions.push({
+    spId, type, qty, balBefore, balAfter,
+    ref:  ref  || '—',
+    note: note || '',
+    by:   by   || currentUserName(),
+    at:   new Date().toLocaleString('th-TH')
+  });
+  saveDB();
+}
+
+let _activeSpareTxnId = null;
+function openSpareTxnDrawer(spId) {
+  const sp = DB.spareParts.find(x=>x.id===spId);
+  if(!sp) return;
+  _activeSpareTxnId = spId;
+  document.getElementById('sptxn-title').textContent = sp.name;
+  document.getElementById('sptxn-sub').textContent   = `${sp.id} · ${sp.partNo||'—'} | คงเหลือ: ${sp.qty} ${sp.unit}`;
+  const flt = document.getElementById('sptxn-type-filter');
+  if(flt) flt.value = '';
+  renderSpareTxnTable();
+  openDrawer('drawer-spare-txn');
+}
+
+function renderSpareTxnTable() {
+  const spId  = _activeSpareTxnId;
+  const flt   = document.getElementById('sptxn-type-filter')?.value || '';
+  const tbody = document.getElementById('sptxn-tbody');
+  const countEl = document.getElementById('sptxn-count');
+  if(!tbody) return;
+
+  let txns = (DB.spareTransactions||[]).filter(t=>t.spId===spId);
+  if(flt) txns = txns.filter(t=>t.type===flt);
+  txns = [...txns].reverse();
+
+  if(countEl) countEl.textContent = `${txns.length} รายการ`;
+
+  if(!txns.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">ไม่มีประวัติ Transaction</td></tr>';
+    return;
+  }
+  tbody.innerHTML = txns.map(t => {
+    const isIn  = t.type === 'รับเข้า';
+    const isAdj = t.type === 'ปรับปรุง';
+    const qtyFmt = (isIn ? '+' : isAdj ? (t.qty>=0?'+':'') : '-') + Math.abs(t.qty);
+    const refLink = t.ref && t.ref.startsWith('CM-')
+      ? `<a href="#" onclick="event.preventDefault();closeDrawer();setTimeout(()=>openRepairManageDrawer('${t.ref}'),200)" style="color:var(--blue)">${t.ref}</a>`
+      : `<span style="color:var(--text2)">${t.ref}</span>`;
+    return `<tr>
+      <td style="font-size:11px;color:var(--text3);white-space:nowrap">${t.at}</td>
+      <td><span class="badge ${isIn?'green':isAdj?'blue':'red'}" style="font-size:10px">${t.type}</span></td>
+      <td style="font-weight:700;color:${isIn?'var(--teal)':'var(--red)'};text-align:right">${qtyFmt}</td>
+      <td style="text-align:right;color:var(--text3)">${t.balBefore}</td>
+      <td style="text-align:right;font-weight:700">${t.balAfter}</td>
+      <td>${refLink}</td>
+      <td style="color:var(--text2);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${t.note}">${t.note||'—'}</td>
+      <td style="font-size:11px;color:var(--text3)">${t.by}</td>
+    </tr>`;
+  }).join('');
+}
+
 function renderSpareTable() {
   const tb = document.getElementById('spare-tbody');
   if (!tb) return;
@@ -2218,6 +2955,7 @@ function renderSpareTable() {
       <td>
         <button class="btn btn-sm" onclick="openSpareDrawer('${p.id}')" style="font-size:11px;padding:3px 8px">แก้ไข</button>
         <button class="btn btn-sm" onclick="adjustSpareQty('${p.id}')" style="font-size:11px;padding:3px 8px;margin-left:4px">รับ/จ่าย</button>
+        <button class="btn btn-sm" onclick="openSpareTxnDrawer('${p.id}')" style="font-size:11px;padding:3px 8px;margin-left:4px;border-color:var(--blue);color:var(--blue)">ประวัติ</button>
       </td>
     </tr>`;
   }).join('');
@@ -2287,7 +3025,7 @@ function saveSparePart() {
   if (!name) { toast('กรุณาระบุชื่ออะไหล่', 'amber'); return; }
   const editId = document.getElementById('dsp-id').value;
   const rec = {
-    id: editId || 'SP-' + String(DB.spareParts.length + 1).padStart(3,'0'),
+    id: editId || nextDocId('spare'),
     name,
     partNo: document.getElementById('dsp-partno').value.trim(),
     category: document.getElementById('dsp-cat').value,
@@ -2301,11 +3039,20 @@ function saveSparePart() {
     lastUpdated: new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'}),
   };
   if (editId) {
+    const old = DB.spareParts.find(x=>x.id===editId);
+    const oldQty = old ? old.qty : 0;
     const idx = DB.spareParts.findIndex(x => x.id === editId);
     if (idx >= 0) DB.spareParts[idx] = rec;
+    if (old && rec.qty !== oldQty) {
+      const delta = rec.qty - oldQty;
+      addSpareTransaction(rec.id, delta>=0?'รับเข้า':'จ่ายออก', delta, oldQty, rec.qty, 'ปรับปรุงข้อมูล', 'แก้ไขผ่านหน้าข้อมูล', currentUserName());
+    }
     toast('อัปเดตอะไหล่ ' + name + ' สำเร็จ', 'teal');
   } else {
     DB.spareParts.push(rec);
+    if (rec.qty > 0) {
+      addSpareTransaction(rec.id, 'รับเข้า', rec.qty, 0, rec.qty, 'เปิดรายการใหม่', 'ขึ้นทะเบียนอะไหล่', currentUserName());
+    }
     toast('เพิ่มอะไหล่ ' + name + ' สำเร็จ', 'teal');
   }
   addAuditLog('SPARE', currentUserName(), (editId?'แก้ไข':'เพิ่ม')+'อะไหล่', rec.id+' '+name);
@@ -2322,14 +3069,19 @@ async function adjustSpareQty(partId) {
   if (input === null || input === false) return;
   const delta = parseInt(input);
   if (isNaN(delta) || delta === 0) { toast('กรุณาระบุจำนวนที่ถูกต้อง', 'amber'); return; }
-  const newQty = Math.max(0, p.qty + delta);
+  const note = await popPrompt('เหตุผล / อ้างอิงเอกสาร (เว้นว่างได้)', '', delta > 0 ? 'บันทึกการรับเข้า' : 'บันทึกการจ่ายออก');
+  if (note === null) return;
+  const balBefore = p.qty;
+  const newQty    = Math.max(0, p.qty + delta);
   p.qty = newQty;
   p.lastUpdated = new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});
-  addAuditLog('SPARE', currentUserName(), `${delta>0?'รับเข้า':'จ่ายออก'}อะไหล่ ${p.id}`, `${p.name}: ${delta>0?'+':''}${delta} → คงเหลือ ${newQty} ${p.unit}`);
+  const type = delta > 0 ? 'รับเข้า' : 'จ่ายออก';
+  addSpareTransaction(p.id, type, delta, balBefore, newQty, note||'ปรับปรุงStock', note||'', currentUserName());
+  addAuditLog('SPARE', currentUserName(), `${type}อะไหล่ ${p.id}`, `${p.name}: ${delta>0?'+':''}${delta} → คงเหลือ ${newQty} ${p.unit}${note?' ('+note+')':''}`);
   renderSpareTable();
   renderSpareKPI();
   updateSpareNavBadge();
-  toast(`${p.name}: ${delta>0?'รับเข้า':'จ่ายออก'} ${Math.abs(delta)} ${p.unit} (คงเหลือ ${newQty})`, newQty<=p.minQty?'amber':'teal');
+  toast(`${p.name}: ${type} ${Math.abs(delta)} ${p.unit} (คงเหลือ ${newQty})`, newQty<=p.minQty?'amber':'teal');
 }
 
 function renderIncidentTable() {
@@ -2625,7 +3377,7 @@ function submitNewLoan() {
   const rights = document.getElementById('f-rights').value;
   const dx = document.getElementById('f-dx').value.trim();
   
-  const lnId = 'LN-'+String(DB.loans.length+42).padStart(4,'0');
+  const lnId = nextDocId('loan');
   const today = new Date();
   const thaiDate = today.getDate()+' เม.ย. '+(today.getFullYear()+543-2500+2567);
   
@@ -2656,6 +3408,7 @@ function addAuditLog(type, user, action, detail) {
   const now = new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   const hash = '0x'+Math.random().toString(16).substring(2,10).toUpperCase();
   DB.auditLog.unshift({time:now,user,action,detail,type,hash:hash});
+  saveDB();
 }
 
 function filterAuditLog(type) {
@@ -2708,6 +3461,108 @@ function hideSearchResults(){const r = document.getElementById('search-results')
 /* ════════════════════════════════
    SETTINGS
 ════════════════════════════════ */
+/* ════════════════════════════════
+   DOCUMENT NUMBERING
+════════════════════════════════ */
+function nextDocId(type) {
+  const cfg = DB.settings.docNumbering[type];
+  if (!cfg) return type.toUpperCase() + '-' + Date.now();
+  cfg.seq++;
+  return cfg.prefix + '-' + String(cfg.seq).padStart(cfg.digits, '0');
+}
+
+function previewDocId(type) {
+  const cfg = DB.settings.docNumbering[type];
+  if (!cfg) return '—';
+  return cfg.prefix + '-' + String(cfg.seq + 1).padStart(cfg.digits, '0');
+}
+
+function renderDocNumberingSection() {
+  const cfg = DB.settings.docNumbering;
+  const rows = Object.entries(cfg).map(([type, c]) => {
+    const next = c.prefix + '-' + String(c.seq + 1).padStart(c.digits, '0');
+    return `<tr>
+      <td style="padding:10px 12px;white-space:nowrap">
+        <div style="font-size:12px;font-weight:700;color:var(--text)">${c.label}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:1px">${c.desc}</div>
+      </td>
+      <td style="padding:10px 12px;text-align:center">
+        <div style="display:flex;align-items:center;gap:6px;justify-content:center">
+          <input id="dn-prefix-${type}" value="${c.prefix}" maxlength="8"
+            style="width:80px;text-align:center;font-family:var(--m);font-weight:700;font-size:13px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r);padding:5px 8px;outline:none;text-transform:uppercase"
+            oninput="this.value=this.value.toUpperCase();updateDocPreview('${type}')"
+            onfocus="this.style.borderColor='var(--teal)'" onblur="this.style.borderColor='var(--border)'">
+          <span style="color:var(--text3);font-family:var(--m);font-size:13px">-</span>
+          <input id="dn-digits-${type}" type="number" value="${c.digits}" min="2" max="6"
+            style="width:52px;text-align:center;font-family:var(--m);font-size:13px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r);padding:5px 6px;outline:none"
+            oninput="updateDocPreview('${type}')"
+            onfocus="this.style.borderColor='var(--teal)'" onblur="this.style.borderColor='var(--border)'">
+          <span style="color:var(--text3);font-size:11px">หลัก</span>
+        </div>
+      </td>
+      <td style="padding:10px 12px;text-align:center;font-family:var(--m);font-size:12px;color:var(--text3)">${c.seq}</td>
+      <td style="padding:10px 12px;text-align:center">
+        <span id="dn-preview-${type}" style="font-family:var(--m);font-size:13px;font-weight:700;color:var(--teal);background:var(--teal-d);padding:3px 10px;border-radius:6px">${next}</span>
+      </td>
+      <td style="padding:10px 12px;text-align:center">
+        <button class="btn btn-sm btn-teal" onclick="saveDocNumbering('${type}')">บันทึก</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<div style="margin-top:28px">
+    <div style="font-size:14px;font-weight:700;color:var(--text);border-bottom:2px solid var(--border);padding-bottom:8px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      การตั้งค่าเลขที่เอกสาร (Document Numbering)
+    </div>
+    <div class="panel">
+      <div class="panel-head" style="background:var(--surface2)">
+        <div>
+          <div class="panel-title">กำหนด Prefix และรูปแบบเลขที่เอกสาร</div>
+          <div class="panel-subtitle">เลขที่ถัดไปจะออกอัตโนมัติเมื่อสร้างเอกสารใหม่ — แก้ไข Prefix แล้วกด "บันทึก"</div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:var(--surface2)">
+              <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-align:left;white-space:nowrap;letter-spacing:.06em;text-transform:uppercase">ประเภทเอกสาร</th>
+              <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-align:center;letter-spacing:.06em;text-transform:uppercase">Prefix &amp; จำนวนหลัก</th>
+              <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-align:center;letter-spacing:.06em;text-transform:uppercase">เลขล่าสุด</th>
+              <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-align:center;letter-spacing:.06em;text-transform:uppercase">เลขถัดไป (Preview)</th>
+              <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-align:center;letter-spacing:.06em;text-transform:uppercase"></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function updateDocPreview(type) {
+  const prefix = (document.getElementById('dn-prefix-'+type)?.value || '').toUpperCase().trim();
+  const digits = parseInt(document.getElementById('dn-digits-'+type)?.value) || 4;
+  const cfg = DB.settings.docNumbering[type];
+  if (!cfg) return;
+  const next = (prefix||cfg.prefix) + '-' + String(cfg.seq + 1).padStart(digits, '0');
+  const el = document.getElementById('dn-preview-'+type);
+  if (el) el.textContent = next;
+}
+
+function saveDocNumbering(type) {
+  const cfg = DB.settings.docNumbering[type];
+  if (!cfg) return;
+  const prefix = (document.getElementById('dn-prefix-'+type)?.value || '').toUpperCase().trim();
+  const digits = parseInt(document.getElementById('dn-digits-'+type)?.value) || 4;
+  if (!prefix) { toast('กรุณากรอก Prefix', 'red'); return; }
+  cfg.prefix = prefix;
+  cfg.digits = Math.max(2, Math.min(6, digits));
+  addAuditLog('SETTINGS', currentUserName(), 'แก้ไข Prefix เอกสาร '+type, prefix+'-'+String(cfg.seq+1).padStart(cfg.digits,'0'));
+  toast('บันทึก Prefix "'+prefix+'" สำหรับ '+cfg.label+' แล้ว', 'teal');
+  renderSettings();
+}
+
 function renderSettings() {
   const container = document.getElementById('settings-container');
   if(!container) return;
@@ -2763,6 +3618,7 @@ function renderSettings() {
     html += `</div>`;
   }
   if (currentUser && currentUser.role === 'admin') {
+    html += renderDocNumberingSection();
     html += renderUserManagementSection();
   }
   container.innerHTML = html;
@@ -3485,27 +4341,50 @@ function doLogin() {
   const p = document.getElementById('login-pass').value.trim();
   const err = document.getElementById('login-err');
 
+  // Lockout check (Item 10)
+  const lockMsg = checkLoginLockout(u);
+  if (lockMsg) {
+    err.textContent = lockMsg;
+    err.style.display = 'block';
+    return;
+  }
+
   const user = DB.users.find(x => x.username.toLowerCase() === u.toLowerCase() && x.password === p && x.active);
   if (user) {
+    clearFailedLogin(u);
     currentUser = user;
     document.getElementById('login-overlay').style.display = 'none';
     document.getElementById('app-shell').style.display = 'flex';
     document.getElementById('app-fab').style.display = canAccess('loans') ? 'grid' : 'none';
+    err.textContent = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
     err.style.display = 'none';
+    addAuditLog('AUTH', user.name, 'เข้าสู่ระบบสำเร็จ', 'Role: '+user.role+' · IP: local');
+    resetSessionTimer();
     applyRoleUI();
     updateSafetyNavBadge();
     updateSpareNavBadge();
     updateContractNavBadge();
+    updateFSCANavBadge();
     try { initDashboardCharts(); } catch(e) { console.warn('Chart init:', e); }
   } else {
+    recordFailedLogin(u);
+    const rec = _failedLogins.get(u.toLowerCase()) || {};
+    const remaining = Math.max(0, LOGIN_MAX_ATTEMPTS - (rec.count || 0));
+    if (remaining > 0) {
+      err.textContent = `ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง (เหลือ ${remaining} ครั้ง)`;
+    } else {
+      err.textContent = `บัญชีถูกล็อก 5 นาที เนื่องจากพยายามเข้าสู่ระบบผิดพลาดหลายครั้ง`;
+    }
     err.style.display = 'block';
   }
 }
 
 function doLogout() {
+  clearTimeout(_sessionTimer); clearTimeout(_sessionWarnTimer);
   currentUser = null;
   document.getElementById('login-user').value = '';
   document.getElementById('login-pass').value = '';
+  document.getElementById('login-err').textContent = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
   document.getElementById('login-err').style.display = 'none';
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('app-fab').style.display = 'none';
@@ -3535,6 +4414,7 @@ function applyRoleUI() {
     'nav-cal':          'pm',
     'nav-repair':       'repair',
     'nav-incident':     'incident',
+    'nav-fsca':         'fsca',
     'nav-audit':        'audit',
     'nav-reports':      'reports',
     'nav-settings':     'settings',
@@ -3559,6 +4439,7 @@ function applyRoleUI() {
    INIT
 ════════════════════════════════ */
 document.addEventListener('DOMContentLoaded',()=>{
+  loadDB(); // Item 1: restore persisted data
   refreshSelectOptions();
   refreshDashboard();
   renderDeviceCards();
@@ -3568,6 +4449,495 @@ document.addEventListener('DOMContentLoaded',()=>{
   renderRepairTable();
   renderIncidentTable();
   renderQMS();
-  // seed repair devices
+  renderIncomingQC();
   populateRepairDevices();
+  updateFSCANavBadge();
 });
+/* ════════════════════════════════════════════════════════════════
+   ITEM 3 — ISO 14971 NUMERICAL RISK SCORE (5x5 Matrix)
+════════════════════════════════════════════════════════════════ */
+function riskInfo(score) {
+  if (score >= 15) return {level:'สูงมาก (High)',    color:'#dc2626', bg:'#fef2f2'};
+  if (score >= 9)  return {level:'กลาง (Medium)',     color:'#d97706', bg:'#fffbeb'};
+  if (score >= 4)  return {level:'ต่ำ (Low)',          color:'#16a34a', bg:'#f0fdf4'};
+  return              {level:'ต่ำมาก (Negligible)', color:'#64748b', bg:'#f8fafc'};
+}
+
+function openRiskModal(assetId) {
+  const asset = DB.assets.find(a => a.id === assetId);
+  if (!asset) return;
+  document.getElementById('risk-modal-asset-name').textContent = asset.name + ' (' + asset.id + ')';
+  document.getElementById('risk-asset-id').value  = assetId;
+  document.getElementById('risk-p').value         = asset.riskP || 3;
+  document.getElementById('risk-s').value         = asset.riskS || 3;
+  document.getElementById('risk-rationale').value = asset.riskRationale || '';
+  updateRiskPreview();
+  document.getElementById('modal-risk').classList.add('open');
+}
+function closeRiskModal() { document.getElementById('modal-risk').classList.remove('open'); }
+
+function updateRiskPreview() {
+  const p     = parseInt(document.getElementById('risk-p').value) || 3;
+  const s     = parseInt(document.getElementById('risk-s').value) || 3;
+  const score = p * s;
+  const info  = riskInfo(score);
+  const el    = document.getElementById('risk-score-preview');
+  el.style.background = info.bg;
+  el.style.border     = '2px solid ' + info.color + '55';
+  el.innerHTML = '<div style="font-size:36px;font-weight:800;color:' + info.color + '">' + score + '</div>'
+    + '<div style="font-weight:700;color:' + info.color + ';font-size:13px">' + info.level + '</div>'
+    + '<div style="font-size:11px;color:var(--text3);margin-top:2px">P=' + p + ' x S=' + s + '</div>';
+}
+
+function saveRiskScore() {
+  const assetId   = document.getElementById('risk-asset-id').value;
+  const p         = parseInt(document.getElementById('risk-p').value);
+  const s         = parseInt(document.getElementById('risk-s').value);
+  const rationale = document.getElementById('risk-rationale').value.trim();
+  const score     = p * s;
+  const info      = riskInfo(score);
+  const idx       = DB.assets.findIndex(a => a.id === assetId);
+  if (idx < 0) { toast('ไม่พบอุปกรณ์', 'red'); return; }
+  DB.assets[idx].riskP         = p;
+  DB.assets[idx].riskS         = s;
+  DB.assets[idx].riskScore     = score;
+  DB.assets[idx].riskLevel14971= info.level;
+  DB.assets[idx].riskRationale = rationale;
+  DB.assets[idx].riskDate      = new Date().toLocaleDateString('th-TH');
+  addAuditLog('RISK', currentUserName(), 'ประเมินความเสี่ยง ISO 14971', assetId + ' Score=' + score + ' (' + info.level + ')');
+  closeRiskModal();
+  toast('บันทึกคะแนนความเสี่ยง ' + score + ' (' + info.level + ') สำเร็จ', 'teal');
+  renderAssetsTable();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ITEM 4 — FSCA / RECALL MODULE (ECRI, ISO 13485 §8.5.2)
+════════════════════════════════════════════════════════════════ */
+function renderFSCATable() {
+  const tbody = document.getElementById('fsca-tbody');
+  if (!tbody) return;
+  if (!DB.fsca) DB.fsca = [];
+  const rows = DB.fsca.map(function(f) {
+    const sc = f.status === 'ปิดแล้ว' ? 'green' : f.status === 'ดำเนินการแล้ว' ? 'teal' : 'red';
+    const tc = f.type === 'Recall' ? 'red' : f.type === 'Hazard Alert' ? 'amber' : 'blue';
+    return '<tr>'
+      + '<td><span class="mono" style="font-weight:700">' + f.id + '</span><div style="font-size:10px;color:var(--text3)">' + (f.date || '') + '</div></td>'
+      + '<td><div style="font-weight:600">' + f.title + '</div><div style="font-size:11px;color:var(--text2)">' + (f.mfr || '') + ' ' + (f.model || '') + '</div></td>'
+      + '<td><span class="badge ' + tc + '">' + f.type + '</span></td>'
+      + '<td style="font-size:11px">' + (f.affectedDevices || []).map(function(id) { return '<span class="mono">' + id + '</span>'; }).join('<br>') + '</td>'
+      + '<td><span class="badge ' + sc + '">' + f.status + '</span></td>'
+      + '<td style="max-width:180px;white-space:normal;font-size:12px">' + (f.action || '—') + '</td>'
+      + '<td><button class="btn btn-sm" onclick="openFSCADrawer(\'' + f.id + '\')">จัดการ</button></td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">ไม่มีรายการ FSCA / Recall</td></tr>';
+  tbody.innerHTML = rows;
+}
+
+var _editingFSCAId = null;
+
+function openFSCACreateDrawer() {
+  _editingFSCAId = null;
+  document.getElementById('fsca-drawer-title').textContent = 'สร้าง FSCA Notice ใหม่';
+  document.getElementById('fsca-id-preview').textContent   = previewDocId('fsca');
+  ['fsca-title', 'fsca-mfr', 'fsca-model', 'fsca-source', 'fsca-action', 'fsca-affected'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('fsca-type').value   = 'Safety Alert';
+  document.getElementById('fsca-status').value = 'รอดำเนินการ';
+  document.getElementById('fsca-date').value   = new Date().toISOString().split('T')[0];
+  openDrawer('drawer-fsca');
+}
+
+function openFSCADrawer(id) {
+  const f = DB.fsca.find(function(x) { return x.id === id; });
+  if (!f) return;
+  _editingFSCAId = id;
+  document.getElementById('fsca-drawer-title').textContent = 'จัดการ FSCA: ' + id;
+  document.getElementById('fsca-id-preview').textContent   = id;
+  document.getElementById('fsca-title').value    = f.title || '';
+  document.getElementById('fsca-mfr').value      = f.mfr || '';
+  document.getElementById('fsca-model').value    = f.model || '';
+  document.getElementById('fsca-type').value     = f.type || 'Safety Alert';
+  document.getElementById('fsca-source').value   = f.source || '';
+  document.getElementById('fsca-action').value   = f.action || '';
+  document.getElementById('fsca-affected').value = (f.affectedDevices || []).join(', ');
+  document.getElementById('fsca-status').value   = f.status || 'รอดำเนินการ';
+  document.getElementById('fsca-date').value     = f.dateIso || new Date().toISOString().split('T')[0];
+  openDrawer('drawer-fsca');
+}
+
+function saveFSCA() {
+  const title = document.getElementById('fsca-title').value.trim();
+  if (!title) { toast('กรุณาระบุหัวข้อ FSCA', 'red'); return; }
+  const dateIso  = document.getElementById('fsca-date').value;
+  const affected = document.getElementById('fsca-affected').value.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+  const obj = {
+    title:           title,
+    mfr:             document.getElementById('fsca-mfr').value.trim(),
+    model:           document.getElementById('fsca-model').value.trim(),
+    type:            document.getElementById('fsca-type').value,
+    source:          document.getElementById('fsca-source').value.trim(),
+    action:          document.getElementById('fsca-action').value.trim(),
+    affectedDevices: affected,
+    status:          document.getElementById('fsca-status').value,
+    dateIso:         dateIso,
+    date:            dateIso ? formatDateThai(dateIso) : '—',
+  };
+  if (_editingFSCAId) {
+    const idx = DB.fsca.findIndex(function(x) { return x.id === _editingFSCAId; });
+    if (idx > -1) DB.fsca[idx] = Object.assign({}, DB.fsca[idx], obj);
+    addAuditLog('FSCA', currentUserName(), 'อัปเดต FSCA', _editingFSCAId + ' ' + title);
+    toast('อัปเดต FSCA สำเร็จ', 'teal');
+  } else {
+    obj.id = nextDocId('fsca');
+    DB.fsca.push(obj);
+    addAuditLog('FSCA', currentUserName(), 'สร้าง FSCA Notice', obj.id + ' ' + title);
+    toast('สร้าง FSCA ' + obj.id + ' สำเร็จ', 'teal');
+  }
+  saveDB();
+  closeDrawer();
+  renderFSCATable();
+  updateFSCANavBadge();
+}
+
+function updateFSCANavBadge() {
+  const el = document.getElementById('nb-fsca');
+  if (!el) return;
+  const open = (DB.fsca || []).filter(function(f) { return f.status === 'รอดำเนินการ'; }).length;
+  el.textContent    = open;
+  el.style.display  = open ? '' : 'none';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ITEM 5 — DYNAMIC MTBF / MTTR / AVAILABILITY
+════════════════════════════════════════════════════════════════ */
+function calcReliabilityKPIs() {
+  const done      = DB.repairs.filter(function(r) { return r.status === 'ซ่อมเสร็จ' || r.status === 'คืนแล้ว' || r.status === 'ปิดงาน'; });
+  const totalDays = done.reduce(function(s, r) { return s + (r.days || 0); }, 0);
+  const mttr      = done.length ? totalDays / done.length : 0;
+  const active    = DB.assets.filter(function(a) { return a.status !== 'จำหน่าย/แทงจำหน่าย'; }).length;
+  const failRate  = active > 0 ? DB.repairs.length / active : 0;
+  const mtbf      = failRate > 0 ? 365 / failRate : 365;
+  const avail     = mtbf > 0 ? (mtbf / (mtbf + mttr)) * 100 : 100;
+  return {
+    mttrHrs:  (mttr * 24).toFixed(1),
+    mtbfDays: mtbf.toFixed(0),
+    availPct: avail.toFixed(1),
+  };
+}
+
+function refreshReportsKPIDynamic() {
+  const kpis   = calcReliabilityKPIs();
+  const elMttr = document.getElementById('kpi-mttr-box');
+  if (elMttr) {
+    const ok = parseFloat(kpis.mttrHrs) <= 48;
+    elMttr.innerHTML = '<div class="kpi-label">MTTR เฉลี่ย</div>'
+      + '<div class="kpi-value">' + kpis.mttrHrs + ' ชม.</div>'
+      + '<div class="kpi-meta">เป้า ≤ 48 ชม. ' + (ok ? '✓' : '✗') + '</div>'
+      + '<div class="kpi-bar"><div class="kpi-fill" style="width:' + Math.min(100, parseFloat(kpis.mttrHrs) / 48 * 100).toFixed(0) + '%;background:var(--blue)"></div></div>';
+  }
+  const elAvail = document.getElementById('kpi-uptime-box');
+  if (elAvail) {
+    const ok2 = parseFloat(kpis.availPct) >= 95;
+    elAvail.innerHTML = '<div class="kpi-label">Uptime เฉลี่ย</div>'
+      + '<div class="kpi-value">' + kpis.availPct + '%</div>'
+      + '<div class="kpi-meta">เป้า ≥ 95% ' + (ok2 ? '✓' : '✗') + '</div>'
+      + '<div class="kpi-bar"><div class="kpi-fill" style="width:' + kpis.availPct + '%;background:var(--teal)"></div></div>';
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ITEM 6 — CAL CERTIFICATE LINK (ISO 13485 §7.6 / NIMT)
+════════════════════════════════════════════════════════════════ */
+function linkCalCert(pmId) {
+  const pm = DB.pmList.find(function(x) { return x.id === pmId && x.kind === 'cal'; });
+  if (!pm) { toast('ไม่พบงานสอบเทียบ', 'red'); return; }
+  popPrompt('กรอกเลขที่ใบรับรองการสอบเทียบ (Certificate No.):', '', 'บันทึก Cal Certificate').then(function(certNo) {
+    if (!certNo || !certNo.trim()) return;
+    const certDate = new Date().toLocaleDateString('th-TH');
+    pm.certNo   = certNo.trim();
+    pm.certDate = certDate;
+    const asset = DB.assets.find(function(a) { return a.id === pm.devId; });
+    if (asset) {
+      if (!asset.calCerts) asset.calCerts = [];
+      asset.calCerts.push({ certNo: certNo.trim(), date: certDate, pmId: pmId, resp: pm.resp || '' });
+      asset.calLastCert     = certNo.trim();
+      asset.calLastCertDate = certDate;
+    }
+    addAuditLog('CAL', currentUserName(), 'บันทึก Cal Certificate', pm.devId + ' Cert:' + certNo.trim() + ' (' + pmId + ')');
+    toast('บันทึก Cal Certificate สำเร็จ', 'teal');
+    renderPMTable();
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ITEM 7 — INCOMING QC WORKFLOW (ISO 13485 §7.4.3)
+════════════════════════════════════════════════════════════════ */
+var IQC_CHECKLIST_ITEMS = [
+  'บรรจุภัณฑ์ครบถ้วน ไม่มีรอยชำรุด',
+  'ตรงกับ PO/Invoice: ชื่อ รุ่น Serial Number',
+  'เอกสาร IFU / Manual ครบถ้วน',
+  'มีใบรับรอง CE / TIS / อย. (Thai FDA)',
+  'เปิดเครื่องได้ ไม่มี Error code',
+  'Accessories ครบตาม Packing List',
+  'ทดสอบ Function หลักผ่าน',
+  'Electrical Safety test ผ่าน (IEC 62353)',
+];
+
+function renderIncomingQC() {
+  const tbody = document.getElementById('incoming-qc-tbody');
+  if (!tbody) return;
+  if (!DB.incomingQC) DB.incomingQC = [];
+  const rows = DB.incomingQC.map(function(q) {
+    const sc = q.decision === 'ผ่าน (Accept)' ? 'green' : q.decision === 'ไม่ผ่าน (Reject)' ? 'red' : 'amber';
+    return '<tr>'
+      + '<td><span class="mono" style="font-weight:700">' + q.id + '</span><div style="font-size:10px;color:var(--text3)">' + (q.date || '') + '</div></td>'
+      + '<td><span class="mono">' + q.devId + '</span><div style="font-size:11px">' + (q.devName || '') + '</div></td>'
+      + '<td>' + (q.inspector || '—') + '</td>'
+      + '<td><span class="badge ' + sc + '">' + (q.decision || 'รอตรวจ') + '</span></td>'
+      + '<td style="max-width:160px;font-size:12px">' + (q.note || '—') + '</td>'
+      + '<td><button class="btn btn-sm" onclick="viewIQCDetail(\'' + q.id + '\')">รายละเอียด</button></td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">ไม่มีรายการตรวจรับ</td></tr>';
+  tbody.innerHTML = rows;
+}
+
+var _iqcEditId = null;
+
+function openNewIQCDrawer() {
+  _iqcEditId = null;
+  document.getElementById('iqc-drawer-title').textContent = 'ตรวจรับเครื่องมือ (Incoming QC)';
+  document.getElementById('iqc-id-preview').textContent   = previewDocId('incomingQC');
+  document.getElementById('iqc-dev-id').value    = '';
+  document.getElementById('iqc-dev-name').value  = '';
+  document.getElementById('iqc-inspector').value = currentUser ? currentUser.name : '';
+  document.getElementById('iqc-date').value      = new Date().toISOString().split('T')[0];
+  document.getElementById('iqc-decision').value  = '';
+  document.getElementById('iqc-note').value      = '';
+  renderIQCChecklist([]);
+  openDrawer('drawer-incoming-qc');
+}
+
+function viewIQCDetail(id) {
+  const q = DB.incomingQC.find(function(x) { return x.id === id; });
+  if (!q) return;
+  _iqcEditId = id;
+  document.getElementById('iqc-drawer-title').textContent = 'ผลตรวจรับ: ' + id;
+  document.getElementById('iqc-id-preview').textContent   = id;
+  document.getElementById('iqc-dev-id').value    = q.devId || '';
+  document.getElementById('iqc-dev-name').value  = q.devName || '';
+  document.getElementById('iqc-inspector').value = q.inspector || '';
+  document.getElementById('iqc-date').value      = q.dateIso || '';
+  document.getElementById('iqc-decision').value  = q.decision || '';
+  document.getElementById('iqc-note').value      = q.note || '';
+  renderIQCChecklist(q.checklist || []);
+  openDrawer('drawer-incoming-qc');
+}
+
+function renderIQCChecklist(saved) {
+  const el = document.getElementById('iqc-checklist-body');
+  if (!el) return;
+  el.innerHTML = IQC_CHECKLIST_ITEMS.map(function(item, i) {
+    const prev    = saved[i];
+    const checked = prev ? prev.pass : false;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">'
+      + '<input type="checkbox" id="iqc-chk-' + i + '" ' + (checked ? 'checked' : '') + ' style="width:15px;height:15px;cursor:pointer;accent-color:var(--teal)">'
+      + '<label for="iqc-chk-' + i + '" style="font-size:12px;cursor:pointer;flex:1">' + item + '</label>'
+      + '</div>';
+  }).join('');
+}
+
+function saveIncomingQC() {
+  const devId    = document.getElementById('iqc-dev-id').value.trim();
+  const devName  = document.getElementById('iqc-dev-name').value.trim();
+  const decision = document.getElementById('iqc-decision').value;
+  if (!devId)    { toast('กรุณาระบุรหัสอุปกรณ์', 'red'); return; }
+  if (!decision) { toast('กรุณาเลือกผลการตรวจรับ', 'red'); return; }
+  const dateIso  = document.getElementById('iqc-date').value;
+  const chkResults = IQC_CHECKLIST_ITEMS.map(function(item, i) {
+    var chk = document.getElementById('iqc-chk-' + i);
+    return { item: item, pass: !!(chk && chk.checked) };
+  });
+  const passCount = chkResults.filter(function(c) { return c.pass; }).length;
+  const obj = {
+    id:         nextDocId('incomingQC'),
+    devId:      devId,
+    devName:    devName,
+    inspector:  document.getElementById('iqc-inspector').value.trim(),
+    dateIso:    dateIso,
+    date:       dateIso ? formatDateThai(dateIso) : '—',
+    decision:   decision,
+    note:       document.getElementById('iqc-note').value.trim(),
+    checklist:  chkResults,
+    passCount:  passCount,
+    totalCount: IQC_CHECKLIST_ITEMS.length,
+  };
+  DB.incomingQC.push(obj);
+  if (decision === 'ผ่าน (Accept)') {
+    const asset = DB.assets.find(function(a) { return a.id === devId; });
+    if (asset && (asset.status === 'รอตรวจสอบ' || asset.status === 'จอง/รอตรวจสอบ')) {
+      asset.status = 'พร้อมใช้';
+    }
+  }
+  if (decision === 'ไม่ผ่าน (Reject)') {
+    const repId = nextDocId('repair');
+    DB.repairs.push({
+      id: repId, devId: devId, device: devName,
+      sym: 'ไม่ผ่านการตรวจรับ (Incoming QC Reject) — ' + (obj.note || ''),
+      reporter: obj.inspector, date: obj.date, days: 0,
+      status: 'รอดำเนินการ', ext: false, cost: 0, cause: 'ไม่ผ่าน Incoming QC', parts: '', tech: '',
+    });
+    toast('สร้างใบแจ้งซ่อม ' + repId + ' อัตโนมัติ', 'amber');
+  }
+  addAuditLog('QC', currentUserName(), 'ตรวจรับ ' + decision,
+    devId + ' ' + devName + ' (' + obj.id + ') ' + passCount + '/' + IQC_CHECKLIST_ITEMS.length + ' รายการผ่าน');
+  saveDB();
+  closeDrawer();
+  renderIncomingQC();
+  toast('บันทึกผลตรวจรับ ' + obj.id + ' สำเร็จ', 'teal');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ITEM 8 — ANNUAL BUDGET PLANNING (HA Thailand §3.3)
+════════════════════════════════════════════════════════════════ */
+function calcBudgetData() {
+  var byDept = {};
+  DB.assets.filter(function(a) { return a.status !== 'จำหน่าย/แทงจำหน่าย'; }).forEach(function(asset) {
+    var dept = asset.dept || 'ไม่ระบุ';
+    if (!byDept[dept]) byDept[dept] = { pmCost: 0, calCost: 0, spareCost: 0, total: 0, count: 0 };
+    byDept[dept].count++;
+    var pmCost    = DB.pmList.filter(function(p) { return p.devId === asset.id && p.kind === 'pm'; })
+                             .reduce(function(s, p) { return s + (p.cost || 0); }, 0);
+    var calCost   = DB.pmList.filter(function(p) { return p.devId === asset.id && p.kind === 'cal'; })
+                             .reduce(function(s, p) { return s + (p.cost || 0); }, 0);
+    var spareCost = DB.spareParts.filter(function(s) { return s.compatible === asset.id; })
+                                 .reduce(function(s2, s) { return s2 + (s.unitCost || 0) * (s.qty || 0); }, 0);
+    byDept[dept].pmCost    += pmCost;
+    byDept[dept].calCost   += calCost;
+    byDept[dept].spareCost += spareCost;
+    byDept[dept].total     += pmCost + calCost + spareCost;
+  });
+  return byDept;
+}
+
+function renderBudgetPanel() {
+  var el = document.getElementById('budget-panel-body');
+  if (!el) return;
+  var byDept = calcBudgetData();
+  var rows = Object.entries(byDept).sort(function(a, b) { return b[1].total - a[1].total; })
+    .map(function(entry) {
+      var dept = entry[0]; var d = entry[1];
+      return '<tr>'
+        + '<td>' + dept + '</td>'
+        + '<td style="text-align:right">' + d.count + '</td>'
+        + '<td style="text-align:right">' + d.pmCost.toLocaleString() + '</td>'
+        + '<td style="text-align:right">' + d.calCost.toLocaleString() + '</td>'
+        + '<td style="text-align:right">' + d.spareCost.toLocaleString() + '</td>'
+        + '<td style="text-align:right;font-weight:700;color:var(--teal)">' + d.total.toLocaleString() + '</td>'
+        + '</tr>';
+    }).join('');
+  var grand = Object.values(byDept).reduce(function(s, d) { return s + d.total; }, 0);
+  el.innerHTML = '<div style="margin-bottom:10px;font-size:12px;color:var(--text2)">ประมาณการจาก PM/Cal Work Orders และมูลค่าอะไหล่ Compatible แยกตามแผนก (บาท)</div>'
+    + '<table class="tbl">'
+    + '<thead><tr><th>แผนก</th><th style="text-align:right">อุปกรณ์</th><th style="text-align:right">ค่า PM</th><th style="text-align:right">ค่า Cal</th><th style="text-align:right">อะไหล่</th><th style="text-align:right">รวม (บาท)</th></tr></thead>'
+    + '<tbody>' + (rows || '<tr><td colspan="6" style="text-align:center;color:var(--text3)">ไม่มีข้อมูล</td></tr>') + '</tbody>'
+    + '<tfoot><tr style="font-weight:700;background:var(--bg2)"><td colspan="5" style="text-align:right">งบประมาณรวม</td><td style="text-align:right;color:var(--teal)">' + grand.toLocaleString() + ' บาท</td></tr></tfoot>'
+    + '</table>';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ITEM 9 — HA/JCI COMPLIANCE REPORT (HA Thailand / JCI ME)
+════════════════════════════════════════════════════════════════ */
+function generateComplianceReport() {
+  var pmWOs   = DB.pmList.filter(function(p) { return p.kind === 'pm'; });
+  var calWOs  = DB.pmList.filter(function(p) { return p.kind === 'cal'; });
+  var pmRate  = pmWOs.length  ? (pmWOs.filter(function(p)  { return p.status === 'เสร็จสิ้น'; }).length / pmWOs.length  * 100).toFixed(1) : '0';
+  var calRate = calWOs.length ? (calWOs.filter(function(p) { return p.status === 'เสร็จสิ้น'; }).length / calWOs.length * 100).toFixed(1) : '0';
+  var safetyPass = DB.safetyTests.filter(function(t) { return t.result === 'ผ่าน (Pass)'; }).length;
+  var safetyRate = DB.safetyTests.length ? (safetyPass / DB.safetyTests.length * 100).toFixed(1) : '0';
+  var openInc    = DB.incidents.filter(function(i) { return i.status !== 'ปิดแล้ว (Closed)'; }).length;
+  var kpis       = calcReliabilityKPIs();
+  var activeAssets = DB.assets.filter(function(a) { return a.status !== 'จำหน่าย/แทงจำหน่าย'; });
+  var depts = activeAssets.map(function(a) { return a.dept; }).filter(function(v, i, arr) { return arr.indexOf(v) === i; });
+
+  var deptRows = depts.map(function(dept) {
+    var ids  = activeAssets.filter(function(a) { return a.dept === dept; }).map(function(a) { return a.id; });
+    var dpm  = pmWOs.filter(function(p) { return ids.indexOf(p.devId) > -1; });
+    var done = dpm.filter(function(p) { return p.status === 'เสร็จสิ้น'; }).length;
+    var rate = dpm.length ? (done / dpm.length * 100).toFixed(0) : 'N/A';
+    var col  = parseFloat(rate) >= 80 ? '#16a34a' : parseFloat(rate) >= 60 ? '#d97706' : '#dc2626';
+    return '<tr><td>' + dept + '</td><td>' + dpm.length + '</td><td>' + done + '</td><td style="font-weight:700;color:' + col + '">' + rate + '%</td></tr>';
+  }).join('');
+
+  var months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var d = new Date();
+  var printDate = d.getDate() + ' ' + months[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+
+  var html = '<style>'
+    + 'body{font-family:"Noto Sans Thai",sans-serif;font-size:12px;color:#1e293b;line-height:1.6}'
+    + 'h2{color:#0d9488;border-bottom:2px solid #0d9488;padding-bottom:6px;margin-top:0}'
+    + 'h3{font-size:13px;margin:18px 0 6px;color:#0f172a}'
+    + 'table{width:100%;border-collapse:collapse;margin-bottom:14px}'
+    + 'th{background:#f1f5f9;padding:5px 8px;text-align:left;font-weight:700;font-size:11px}'
+    + 'td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:12px}'
+    + '.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0}'
+    + '.kpi-b{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center}'
+    + '.kpi-b .n{font-size:24px;font-weight:800;color:#0d9488}.kpi-b .l{font-size:10px;color:#64748b}'
+    + '</style>'
+    + '<h2>รายงานความสอดคล้องมาตรฐาน HA Thailand / JCI</h2>'
+    + '<div style="color:#64748b;margin-bottom:10px">วันที่: ' + printDate + ' | จัดทำโดย: ' + currentUserName() + '</div>'
+    + '<div class="kpis">'
+    + '<div class="kpi-b"><div class="n">' + pmRate + '%</div><div class="l">PM Completion</div></div>'
+    + '<div class="kpi-b"><div class="n">' + calRate + '%</div><div class="l">Cal Completion</div></div>'
+    + '<div class="kpi-b"><div class="n">' + kpis.availPct + '%</div><div class="l">Availability</div></div>'
+    + '<div class="kpi-b"><div class="n">' + openInc + '</div><div class="l">Open Incidents</div></div>'
+    + '</div>'
+    + '<h3>PM Completion แยกตามแผนก</h3>'
+    + '<table><thead><tr><th>แผนก</th><th>PM ทั้งหมด</th><th>เสร็จสิ้น</th><th>Rate</th></tr></thead>'
+    + '<tbody>' + (deptRows || '<tr><td colspan="4" style="text-align:center">ไม่มีข้อมูล</td></tr>') + '</tbody></table>'
+    + '<h3>สรุปอุบัติการณ์</h3>'
+    + '<table><thead><tr><th>INC#</th><th>วันที่</th><th>อุปกรณ์</th><th>Severity</th><th>สถานะ</th></tr></thead>'
+    + '<tbody>' + (DB.incidents.map(function(i) { return '<tr><td>' + i.id + '</td><td>' + i.date + '</td><td>' + i.device + '</td><td>' + i.severity + '</td><td>' + i.status + '</td></tr>'; }).join('') || '<tr><td colspan="5" style="text-align:center">ไม่มีข้อมูล</td></tr>') + '</tbody></table>'
+    + '<h3>ทดสอบความปลอดภัยไฟฟ้า IEC 62353 (Pass Rate: ' + safetyRate + '%)</h3>'
+    + '<table><thead><tr><th>EST#</th><th>อุปกรณ์</th><th>วันที่</th><th>ผู้ทดสอบ</th><th>ผล</th></tr></thead>'
+    + '<tbody>' + (DB.safetyTests.map(function(t) {
+        var col2 = t.result.indexOf('ผ่าน') > -1 ? '#16a34a' : '#dc2626';
+        return '<tr><td>' + t.id + '</td><td>' + t.device + '</td><td>' + t.testDate + '</td><td>' + t.tech + '</td><td style="color:' + col2 + ';font-weight:700">' + t.result + '</td></tr>';
+      }).join('') || '<tr><td colspan="5" style="text-align:center">ไม่มีข้อมูล</td></tr>') + '</tbody></table>'
+    + '<h3>FSCA / Recall Notices (' + (DB.fsca || []).length + ' รายการ)</h3>'
+    + '<table><thead><tr><th>FSCA#</th><th>วันที่</th><th>หัวข้อ</th><th>ประเภท</th><th>สถานะ</th></tr></thead>'
+    + '<tbody>' + ((DB.fsca || []).map(function(f) { return '<tr><td>' + f.id + '</td><td>' + (f.date || '') + '</td><td>' + f.title + '</td><td>' + f.type + '</td><td>' + f.status + '</td></tr>'; }).join('') || '<tr><td colspan="5" style="text-align:center">ไม่มีข้อมูล FSCA</td></tr>') + '</tbody></table>';
+
+  printDocument('รายงาน HA/JCI Compliance ' + printDate, html, null, 'portrait');
+  addAuditLog('REPORT', currentUserName(), 'ออกรายงาน HA/JCI Compliance', printDate);
+}
+
+function exportComplianceCSV() {
+  var pmWOs   = DB.pmList.filter(function(p) { return p.kind === 'pm'; });
+  var calWOs  = DB.pmList.filter(function(p) { return p.kind === 'cal'; });
+  var pmRate  = pmWOs.length  ? (pmWOs.filter(function(p)  { return p.status === 'เสร็จสิ้น'; }).length / pmWOs.length  * 100).toFixed(1) : '0';
+  var calRate = calWOs.length ? (calWOs.filter(function(p) { return p.status === 'เสร็จสิ้น'; }).length / calWOs.length * 100).toFixed(1) : '0';
+  var safetyPass = DB.safetyTests.filter(function(t) { return t.result === 'ผ่าน (Pass)'; }).length;
+  var safetyRate = DB.safetyTests.length ? (safetyPass / DB.safetyTests.length * 100).toFixed(1) : '0';
+  var openInc    = DB.incidents.filter(function(i) { return i.status !== 'ปิดแล้ว (Closed)'; }).length;
+  var kpis       = calcReliabilityKPIs();
+  var rows = [
+    ['﻿ตัวชี้วัด', 'ค่า', 'เป้าหมาย', 'ผ่าน/ไม่ผ่าน'],
+    ['PM Completion Rate', pmRate + '%', '≥80%', parseFloat(pmRate) >= 80 ? 'ผ่าน' : 'ไม่ผ่าน'],
+    ['Cal Completion Rate', calRate + '%', '100%', parseFloat(calRate) === 100 ? 'ผ่าน' : 'ไม่ผ่าน'],
+    ['Electrical Safety Pass Rate', safetyRate + '%', '100%', parseFloat(safetyRate) === 100 ? 'ผ่าน' : 'ไม่ผ่าน'],
+    ['Open Incidents', openInc, '0', openInc === 0 ? 'ผ่าน' : 'ไม่ผ่าน'],
+    ['Availability (Uptime)', kpis.availPct + '%', '≥95%', parseFloat(kpis.availPct) >= 95 ? 'ผ่าน' : 'ไม่ผ่าน'],
+    ['MTTR เฉลี่ย', kpis.mttrHrs + ' ชม.', '≤48 ชม.', parseFloat(kpis.mttrHrs) <= 48 ? 'ผ่าน' : 'ไม่ผ่าน'],
+  ];
+  var csv  = rows.map(function(r) { return r.map(function(c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'compliance_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('ดาวน์โหลด CSV สำเร็จ', 'teal');
+}
+

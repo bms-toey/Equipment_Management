@@ -120,6 +120,10 @@
       <div class="ni" id="nav-incident" onclick="goto('incident',this)">
         <svg viewBox="0 0 16 16"><path d="M8 1L1 14h14L8 1zM8 6v3M8 11v1"/></svg>Incident / CAPA
       </div>
+      <div class="ni" id="nav-fsca" onclick="goto('fsca',this)">
+        <svg viewBox="0 0 16 16"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zM8 5v4M8 11v1"/></svg>FSCA / Recall
+        <span class="nbadge red" id="nb-fsca" style="display:none">0</span>
+      </div>
       <div class="ni" id="nav-audit" onclick="goto('audit',this)">
         <svg viewBox="0 0 16 16"><path d="M3 3h10v10H3z"/><path d="M6 7h4M6 10h4M6 4h2"/></svg>Audit Trail
       </div>
@@ -543,9 +547,9 @@
   <!-- ─── REPORTS ─── -->
   <div class="page" id="page-reports">
     <div class="kpi-row" style="grid-template-columns:repeat(4,1fr)">
-      <div class="kpi teal"><div class="kpi-label">Uptime เฉลี่ย</div><div class="kpi-value">96.2%</div><div class="kpi-meta">เป้า ≥ 95% ✓</div><div class="kpi-bar"><div class="kpi-fill" style="width:96%;background:var(--teal)"></div></div></div>
+      <div class="kpi teal" id="kpi-uptime-box"><div class="kpi-label">Uptime เฉลี่ย</div><div class="kpi-value">—</div><div class="kpi-meta">กำลังคำนวณ...</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%;background:var(--teal)"></div></div></div>
       <div class="kpi amber"><div class="kpi-label">คืนตรงเวลา</div><div class="kpi-value">87%</div><div class="kpi-meta">เป้า ≥ 95% ✗</div><div class="kpi-bar"><div class="kpi-fill" style="width:87%;background:var(--amber)"></div></div></div>
-      <div class="kpi blue"><div class="kpi-label">MTTR เฉลี่ย</div><div class="kpi-value">31 ชม.</div><div class="kpi-meta">เป้า ≤ 48 ชม. ✓</div><div class="kpi-bar"><div class="kpi-fill" style="width:65%;background:var(--blue)"></div></div></div>
+      <div class="kpi blue" id="kpi-mttr-box"><div class="kpi-label">MTTR เฉลี่ย</div><div class="kpi-value">—</div><div class="kpi-meta">กำลังคำนวณ...</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%;background:var(--blue)"></div></div></div>
       <div class="kpi red"><div class="kpi-label">Cal. compliance</div><div class="kpi-value">94.2%</div><div class="kpi-meta">เป้า 100%</div><div class="kpi-bar"><div class="kpi-fill" style="width:94%;background:var(--red)"></div></div></div>
     </div>
     <div class="g2">
@@ -561,6 +565,34 @@
         <div class="stat-row"><div class="stat-label">Electrical safety pass rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:100%;background:var(--green)"></div></div><div class="stat-value">100%</div></div>
         <div class="stat-row"><div class="stat-label">Damage during loan</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:4%;background:var(--red)"></div></div><div class="stat-value">1 รายการ</div></div>
         <div class="stat-row"><div class="stat-label">อายุการใช้งานเฉลี่ย (Lifespan)</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:60%;background:var(--blue)"></div></div><div class="stat-value">4.2 ปี</div></div>
+      </div>
+    </div>
+
+    <!-- ITEM 8: Annual Budget Planning -->
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title">แผนงบประมาณประจำปี (Annual Budget Planning)</div><div class="panel-subtitle">HA Thailand §3.3 — ประมาณการค่าใช้จ่าย PM, Cal และอะไหล่แยกตามแผนก</div></div>
+        <button class="btn btn-sm" onclick="renderBudgetPanel()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M2 8a6 6 0 1111.5 2M13 5v5h-5"/></svg> คำนวณใหม่</button>
+      </div>
+      <div class="panel-body" id="budget-panel-body">
+        <div style="text-align:center;padding:20px;color:var(--text3)">คลิก "คำนวณใหม่" เพื่อดูงบประมาณ</div>
+      </div>
+    </div>
+
+    <!-- ITEM 9: HA/JCI Compliance Report -->
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="panel-title">รายงานความสอดคล้องมาตรฐาน HA/JCI (Compliance Report)</div><div class="panel-subtitle">ISO 13485 / HA Thailand / JCI ME.7 — ออกรายงานเพื่อการตรวจรับรอง</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" onclick="exportComplianceCSV()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M3 12h10M8 3v7M5 7l3 3 3-3"/></svg> Export CSV</button>
+          <button class="btn btn-teal btn-sm" onclick="generateComplianceReport()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M3 2h10v12H3z"/><path d="M6 5h4M6 8h4M6 11h2"/></svg> พิมพ์รายงาน</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div style="font-size:12px;color:var(--text2);line-height:1.8">
+          รายงานนี้ครอบคลุม: <strong>PM/Cal Completion Rate แยกตามแผนก</strong> · <strong>อัตรา Electrical Safety Pass</strong> · <strong>MTTR/Availability</strong> · <strong>สรุป Incident &amp; CAPA</strong> · <strong>FSCA/Recall Notices</strong><br>
+          เหมาะสำหรับการส่งให้คณะผู้ตรวจประเมิน HA Thailand, JCI, ISO 13485
+        </div>
       </div>
     </div>
   </div>
@@ -582,8 +614,40 @@
     </div>
   </div>
 
+  <!-- ─── FSCA / RECALL ─── -->
+  <div class="page" id="page-fsca">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">FSCA / Recall Management (ISO 13485 §8.5.2 / ECRI)</div>
+          <div class="panel-subtitle">ติดตามการแจ้งเตือนความปลอดภัยและการเรียกคืนผลิตภัณฑ์จากผู้ผลิต (Field Safety Corrective Action)</div>
+        </div>
+        <button class="btn btn-red btn-sm" onclick="openFSCACreateDrawer()">+ สร้าง FSCA Notice</button>
+      </div>
+      <div class="panel-body p0">
+        <table class="tbl">
+          <thead><tr><th>FSCA# / วันที่</th><th>หัวข้อ / ผู้ผลิต</th><th>ประเภท</th><th>อุปกรณ์ที่ได้รับผลกระทบ</th><th>สถานะ</th><th>มาตรการแก้ไข</th><th style="width:70px"></th></tr></thead>
+          <tbody id="fsca-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- ─── QMS & SOP ─── -->
   <div class="page" id="page-qms">
+    <!-- ITEM 7: Incoming QC panel -->
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-head">
+        <div><div class="panel-title">ตรวจรับเครื่องมือแพทย์ (Incoming QC)</div><div class="panel-subtitle">ISO 13485 §7.4.3 — บันทึกผลการตรวจรับอุปกรณ์ใหม่ก่อนขึ้นทะเบียน</div></div>
+        <button class="btn btn-teal btn-sm" onclick="openNewIQCDrawer()">+ ตรวจรับอุปกรณ์</button>
+      </div>
+      <div class="panel-body p0">
+        <table class="tbl">
+          <thead><tr><th>QC# / วันที่</th><th>รหัส / ชื่ออุปกรณ์</th><th>ผู้ตรวจรับ</th><th>ผลการตรวจรับ</th><th>หมายเหตุ</th><th style="width:80px"></th></tr></thead>
+          <tbody id="incoming-qc-tbody"></tbody>
+        </table>
+      </div>
+    </div>
     <div class="g2" style="align-items:start">
       <div class="panel">
         <div class="panel-head">
@@ -697,6 +761,7 @@
         <div class="form-row col2">
           <div class="ff"><label class="flabel">ความถี่ PM (IPM) - รอบเดือน</label><input class="finput" type="number" id="add-pm-freq" placeholder="เช่น 6"></div>
           <div class="ff"><label class="flabel">ความถี่ Calibrate (CAL) - รอบเดือน</label><input class="finput" type="number" id="add-cal-freq" placeholder="เช่น 12"></div>
+          <div class="ff span2"><label class="flabel">ประเภทการสอบเทียบ (Calibration Type)</label><input class="finput" id="add-cal-type" placeholder="เช่น สอบเทียบอุณหภูมิ, สอบเทียบความดัน, สอบเทียบไฟฟ้า (IEC 62353)"></div>
           <div class="ff span2"><label class="flabel">ส่วนควบ (Accessories)</label><input class="finput" id="add-accessories" placeholder="คั่นด้วยลูกน้ำ (,) เช่น สาย Sensor, Battery"></div>
           <div class="ff span2"><label class="flabel">ความถี่ในการเปลี่ยนอะไหล่ (Parts)</label><input class="finput" id="add-parts-freq" placeholder="เช่น เปลี่ยนแบตเตอรี่ทุก 2 ปี"></div>
           <div class="ff span2">
@@ -926,10 +991,32 @@
     <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">บันทึกผลการซ่อมบำรุง</div>
     <div class="form-row col2">
       <div class="ff"><label class="flabel">สาเหตุการชำรุด</label><select class="finput" id="drm-cause"></select></div>
-      <div class="ff"><label class="flabel">รายการอะไหล่ที่ใช้ (หักจากคลัง)</label><input class="finput" id="drm-parts" placeholder="เช่น Board x1, Sensor x1"></div>
       <div class="ff"><label class="flabel">ความก้าวหน้าการซ่อม</label><input class="finput" id="drm-progress" placeholder="ระบุความคืบหน้าล่าสุด..."></div>
       <div class="ff"><label class="flabel">ค่าใช้จ่ายการซ่อม (บาท)</label><input class="finput" type="number" id="drm-cost" placeholder="0"></div>
-      <div class="ff span2"><label class="flabel">การยกระดับปัญหา (Escalation Path)</label><select class="finput" id="drm-escalation"><option value="">-- ไม่มีการยกระดับ --</option><option value="แจ้งหัวหน้าแผนก (Head of Dept.)">แจ้งหัวหน้าแผนก (Head of Dept.)</option><option value="แจ้งผู้ผลิต/ตัวแทนจำหน่าย (Vendor)">แจ้งผู้ผลิต/ตัวแทนจำหน่าย (Vendor)</option><option value="รายงานผู้อำนวยการ (Director Level)">รายงานผู้อำนวยการ (Director Level)</option></select></div>
+      <div class="ff"><label class="flabel">การยกระดับปัญหา (Escalation Path)</label><select class="finput" id="drm-escalation"><option value="">-- ไม่มีการยกระดับ --</option><option value="แจ้งหัวหน้าแผนก (Head of Dept.)">แจ้งหัวหน้าแผนก (Head of Dept.)</option><option value="แจ้งผู้ผลิต/ตัวแทนจำหน่าย (Vendor)">แจ้งผู้ผลิต/ตัวแทนจำหน่าย (Vendor)</option><option value="รายงานผู้อำนวยการ (Director Level)">รายงานผู้อำนวยการ (Director Level)</option></select></div>
+
+      <div class="ff span2">
+        <label class="flabel">รายการอะไหล่ที่ใช้ (หักจากคลัง)</label>
+        <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+          <div id="drm-parts-list" style="padding:8px;display:flex;flex-direction:column;gap:4px;min-height:40px"></div>
+          <div style="border-top:1px solid var(--border);padding:8px;background:var(--surface2);display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select class="finput" id="drm-parts-sel" style="flex:1;min-width:160px"><option value="">-- เลือกอะไหล่จากคลัง --</option></select>
+            <input type="number" class="finput" id="drm-parts-qty" value="1" min="1" style="width:72px" placeholder="จำนวน">
+            <button class="btn btn-sm btn-teal" onclick="addCMPart()" type="button">+ เพิ่ม</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ff span2">
+        <label class="flabel">ช่างผู้ร่วมซ่อม (Co-Technician)</label>
+        <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+          <div id="drm-cotechs-list" style="padding:8px;display:flex;flex-wrap:wrap;gap:6px;min-height:36px"></div>
+          <div style="border-top:1px solid var(--border);padding:8px;background:var(--surface2);display:flex;gap:6px">
+            <select class="finput" id="drm-cotech-sel" style="flex:1"><option value="">-- เลือกช่างร่วมซ่อม --</option></select>
+            <button class="btn btn-sm btn-teal" onclick="addCMCoTech()" type="button">+ เพิ่ม</button>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border)">
@@ -953,9 +1040,10 @@
   <div class="drawer-head"><div><div class="drawer-title">สร้างแผนบำรุงรักษา/สอบเทียบ</div><div class="drawer-sub">สร้าง Work Order ใหม่</div></div><div class="drawer-close" onclick="closeDrawer()">×</div></div>
   <div class="drawer-body">
     <div class="form-row col2">
-      <div class="ff span2"><label class="flabel">อุปกรณ์ <span class="req">*</span></label><select class="finput" id="pm-create-device"><option value="">-- เลือกอุปกรณ์ --</option></select></div>
-      <div class="ff"><label class="flabel">ประเภทงาน <span class="req">*</span></label><select class="finput" id="pm-create-type"><option value="PM (IPM)">PM (IPM)</option><option value="สอบเทียบ (Calibration)">สอบเทียบ (Calibration)</option><option value="ตรวจสอบอื่นๆ">ตรวจสอบอื่นๆ</option></select></div>
+      <div class="ff span2"><label class="flabel">อุปกรณ์ <span class="req">*</span></label><select class="finput" id="pm-create-device" onchange="onPMCreateDeviceChange()"><option value="">-- เลือกอุปกรณ์ --</option></select></div>
+      <div class="ff"><label class="flabel">ประเภทงาน <span class="req">*</span></label><select class="finput" id="pm-create-type" onchange="onPMCreateTypeChange()"><option value="PM (IPM)">PM (IPM)</option><option value="สอบเทียบ (Calibration)">สอบเทียบ (Calibration)</option><option value="ตรวจสอบอื่นๆ">ตรวจสอบอื่นๆ</option></select></div>
       <div class="ff"><label class="flabel">กำหนดการ (Due Date) <span class="req">*</span></label><input class="finput" type="date" id="pm-create-due"></div>
+      <div class="ff span2" id="pm-caltype-row" style="display:none"><label class="flabel">ประเภทการสอบเทียบ (จากทะเบียนเครื่อง)</label><input class="finput" id="pm-create-caltype" placeholder="ระบุประเภทสอบเทียบ"></div>
       <div class="ff span2"><label class="flabel">ผู้รับผิดชอบ</label><select class="finput" id="pm-create-resp"><option value="">-- ระบุช่างหรือหน่วยงาน --</option></select></div>
     </div>
   </div>
@@ -1265,8 +1353,8 @@
       </div>
       <div id="dct-device-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-md);z-index:310;max-height:220px;overflow-y:auto"></div>
     </div>
-    <div id="dct-selected-devices" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;min-height:52px;background:var(--surface2);border:1.5px dashed var(--border2);border-radius:var(--r);padding:10px;align-items:flex-start;align-content:flex-start">
-      <span id="dct-empty-hint" style="color:var(--text3);font-size:12px;align-self:center;width:100%;text-align:center;padding:6px 0">ยังไม่มีอุปกรณ์ที่เลือก — ค้นหาและเพิ่มได้จากช่องด้านบน</span>
+    <div id="dct-selected-devices" style="margin-top:10px;min-height:56px;background:var(--surface2);border:1.5px dashed var(--border2);border-radius:var(--r);padding:12px;display:flex;align-items:center;justify-content:center">
+      <span style="color:var(--text3);font-size:12px;text-align:center">ยังไม่มีอุปกรณ์ที่เลือก — ค้นหาและเพิ่มได้จากช่องด้านบน</span>
     </div>
 
     <div class="ff" style="margin-top:14px"><label class="flabel">หมายเหตุ / เงื่อนไขพิเศษ</label><textarea class="finput" id="dct-note" rows="2" placeholder="ระบุข้อยกเว้นหรือเงื่อนไขพิเศษ..."></textarea></div>
@@ -1377,6 +1465,46 @@
   </div>
 </div>
 
+<!-- Spare Parts Transaction Ledger Drawer -->
+<div class="drawer" id="drawer-spare-txn" style="width:min(680px,96vw)">
+  <div class="drawer-head">
+    <div>
+      <div class="drawer-title" id="sptxn-title">ประวัติ Transaction</div>
+      <div class="drawer-sub" id="sptxn-sub"></div>
+    </div>
+    <div class="drawer-close" onclick="closeDrawer()">×</div>
+  </div>
+  <div class="drawer-body">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <select class="finput" id="sptxn-type-filter" style="width:auto;font-size:12px" onchange="renderSpareTxnTable()">
+        <option value="">ทุกประเภท</option>
+        <option value="รับเข้า">รับเข้า</option>
+        <option value="จ่ายออก">จ่ายออก</option>
+        <option value="ปรับปรุง">ปรับปรุง</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3);margin-left:4px" id="sptxn-count"></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="tbl" style="font-size:12px">
+        <thead><tr>
+          <th>วันที่/เวลา</th>
+          <th>ประเภท</th>
+          <th style="text-align:right">จำนวน</th>
+          <th style="text-align:right">ยอดก่อน</th>
+          <th style="text-align:right">ยอดหลัง</th>
+          <th>อ้างอิง</th>
+          <th>บันทึก</th>
+          <th>ผู้ดำเนินการ</th>
+        </tr></thead>
+        <tbody id="sptxn-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ปิด</button>
+  </div>
+</div>
+
 <!-- ═══════════ MODAL: ANNUAL PM PLAN ═══════════ -->
 <div class="modal-overlay" id="modal-annual-pm" onclick="if(event.target===this) closeAnnualPMModal()">
   <div class="modal" style="max-width:800px">
@@ -1404,6 +1532,129 @@
     <div class="modal-foot">
       <button class="btn" onclick="closeAnnualPMModal()">ยกเลิก</button>
       <button class="btn btn-teal" onclick="generateAnnualPMPlan()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M8 2v12M2 8h12"/></svg> สร้างแผนงาน</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ DRAWER: FSCA / RECALL (Item 4) ═══════════ -->
+<div class="drawer" id="drawer-fsca">
+  <div class="drawer-head">
+    <div><div class="drawer-title" id="fsca-drawer-title">สร้าง FSCA Notice ใหม่</div><div class="drawer-sub">ISO 13485 §8.5.2 / ECRI Field Safety Corrective Action</div></div>
+    <div class="drawer-close" onclick="closeDrawer()">×</div>
+  </div>
+  <div class="drawer-body">
+    <div style="background:var(--bg2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
+      เลขที่: <span class="mono" id="fsca-id-preview" style="font-weight:700;color:var(--teal)">FSCA-001</span>
+    </div>
+    <div class="form-row col2">
+      <div class="ff span2"><label class="flabel">หัวข้อ FSCA / Recall <span class="req">*</span></label><input class="finput" id="fsca-title" placeholder="เช่น Infusion Pump Software Bug — Dose Error Risk"></div>
+      <div class="ff"><label class="flabel">ผู้ผลิต (Manufacturer)</label><input class="finput" id="fsca-mfr" placeholder="เช่น B. Braun"></div>
+      <div class="ff"><label class="flabel">รุ่น (Model / Lot)</label><input class="finput" id="fsca-model" placeholder="เช่น Infusomat Space FW &lt; 689D"></div>
+      <div class="ff"><label class="flabel">ประเภทการแจ้งเตือน</label>
+        <select class="finput" id="fsca-type">
+          <option>Safety Alert</option>
+          <option>Recall</option>
+          <option>Hazard Alert</option>
+          <option>Field Safety Notice</option>
+          <option>Advisory Notice</option>
+        </select>
+      </div>
+      <div class="ff"><label class="flabel">วันที่ได้รับแจ้ง</label><input type="date" class="finput" id="fsca-date"></div>
+      <div class="ff span2"><label class="flabel">แหล่งที่มา (Source)</label><input class="finput" id="fsca-source" placeholder="เช่น Thai FDA, Manufacturer Letter, ECRI Alert"></div>
+      <div class="ff span2"><label class="flabel">รหัสอุปกรณ์ที่ได้รับผลกระทบ (คั่นด้วยจุลภาค)</label><input class="finput" id="fsca-affected" placeholder="ME-0001, ME-0012, ..."></div>
+      <div class="ff span2"><label class="flabel">มาตรการที่ต้องดำเนินการ (Required Action)</label><textarea class="finput" id="fsca-action" rows="3" placeholder="ระบุขั้นตอนที่ต้องดำเนินการ เช่น อัปเดต firmware, ห้ามใช้งาน, ส่งคืนผู้ผลิต..."></textarea></div>
+      <div class="ff"><label class="flabel">สถานะ</label>
+        <select class="finput" id="fsca-status">
+          <option>รอดำเนินการ</option>
+          <option>กำลังดำเนินการ</option>
+          <option>ดำเนินการแล้ว</option>
+          <option>ปิดแล้ว</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="saveFSCA()">บันทึก FSCA</button>
+  </div>
+</div>
+
+<!-- ═══════════ DRAWER: INCOMING QC (Item 7) ═══════════ -->
+<div class="drawer" id="drawer-incoming-qc">
+  <div class="drawer-head">
+    <div><div class="drawer-title" id="iqc-drawer-title">ตรวจรับเครื่องมือ (Incoming QC)</div><div class="drawer-sub">ISO 13485 §7.4.3 — ตรวจสอบเครื่องมือก่อนขึ้นทะเบียนใช้งาน</div></div>
+    <div class="drawer-close" onclick="closeDrawer()">×</div>
+  </div>
+  <div class="drawer-body">
+    <div style="background:var(--bg2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
+      เลขที่ตรวจรับ: <span class="mono" id="iqc-id-preview" style="font-weight:700;color:var(--teal)">QC-001</span>
+    </div>
+    <div class="form-row col2">
+      <div class="ff"><label class="flabel">รหัสอุปกรณ์ <span class="req">*</span></label><input class="finput" id="iqc-dev-id" placeholder="ME-XXXX"></div>
+      <div class="ff"><label class="flabel">ชื่ออุปกรณ์</label><input class="finput" id="iqc-dev-name" placeholder="ระบุชื่อ"></div>
+      <div class="ff"><label class="flabel">ผู้ตรวจรับ</label><input class="finput" id="iqc-inspector"></div>
+      <div class="ff"><label class="flabel">วันที่ตรวจรับ</label><input type="date" class="finput" id="iqc-date"></div>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:12px 0 6px;text-transform:uppercase;letter-spacing:.06em">รายการตรวจสอบ (Incoming Inspection Checklist)</div>
+    <div id="iqc-checklist-body"></div>
+    <div class="form-row col2" style="margin-top:14px">
+      <div class="ff"><label class="flabel">ผลการตรวจรับ <span class="req">*</span></label>
+        <select class="finput" id="iqc-decision">
+          <option value="">— เลือกผล —</option>
+          <option>ผ่าน (Accept)</option>
+          <option>ผ่านแบบมีเงื่อนไข (Conditional Accept)</option>
+          <option>ไม่ผ่าน (Reject)</option>
+        </select>
+      </div>
+      <div class="ff"><label class="flabel">หมายเหตุ</label><input class="finput" id="iqc-note" placeholder="ปัญหาที่พบ / เงื่อนไขการรับ"></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
+    <button class="btn btn-teal" onclick="saveIncomingQC()">บันทึกผลตรวจรับ</button>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: ISO 14971 RISK SCORE (Item 3) ═══════════ -->
+<div class="modal-overlay" id="modal-risk" onclick="if(event.target===this)closeRiskModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head">
+      <div><div class="modal-title">ประเมินความเสี่ยง ISO 14971 (Risk Assessment)</div><div class="modal-sub" id="risk-modal-asset-name"></div></div>
+      <div class="modal-close" onclick="closeRiskModal()">×</div>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="risk-asset-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <label class="flabel">โอกาสเกิด (Probability) P</label>
+          <select class="finput" id="risk-p" onchange="updateRiskPreview()">
+            <option value="1">1 — แทบจะไม่เกิด (Negligible)</option>
+            <option value="2">2 — โอกาสน้อย (Rare)</option>
+            <option value="3" selected>3 — บางครั้ง (Possible)</option>
+            <option value="4">4 — บ่อยครั้ง (Likely)</option>
+            <option value="5">5 — แทบจะแน่นอน (Almost Certain)</option>
+          </select>
+        </div>
+        <div>
+          <label class="flabel">ความรุนแรง (Severity) S</label>
+          <select class="finput" id="risk-s" onchange="updateRiskPreview()">
+            <option value="1">1 — ไม่มีอันตราย (Negligible)</option>
+            <option value="2">2 — เล็กน้อย (Minor)</option>
+            <option value="3" selected>3 — ปานกลาง (Moderate)</option>
+            <option value="4">4 — รุนแรง (Serious)</option>
+            <option value="5">5 — รุนแรงมาก / เสียชีวิต (Catastrophic)</option>
+          </select>
+        </div>
+      </div>
+      <div id="risk-score-preview" style="text-align:center;padding:20px;border-radius:10px;margin-bottom:16px;transition:all .3s"></div>
+      <div>
+        <label class="flabel">เหตุผล / หลักฐานการประเมิน (Rationale)</label>
+        <textarea class="finput" id="risk-rationale" rows="3" placeholder="อ้างอิง ECRI Hazard Class, ประวัติ Incident, ผลการทดสอบ..."></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeRiskModal()">ยกเลิก</button>
+      <button class="btn btn-teal" onclick="saveRiskScore()">บันทึกคะแนนความเสี่ยง</button>
     </div>
   </div>
 </div>

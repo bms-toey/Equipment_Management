@@ -282,7 +282,20 @@ const DB = {
       {name: 'Mindray Thai', taxId: '', address: '', tel: '', contact: ''}
     ],
     repairCause: ['อุปกรณ์สึกหรอตามอายุ', 'ผู้ใช้งานใช้งานผิดวิธี (Human error)', 'ระบบไฟฟ้า/ไฟกระชาก', 'Firmware / Software Error', 'ตกหล่น/กระแทก'],
-    technician: ['วิชัย สุขดี', 'สมชาย รักดี', 'ณัฐวุฒิ ใจมั่น']
+    technician: ['วิชัย สุขดี', 'สมชาย รักดี', 'ณัฐวุฒิ ใจมั่น'],
+    docNumbering: {
+      asset:      { prefix:'ME',   digits:4, seq:95,  label:'ครุภัณฑ์ (Asset)',              desc:'รหัสทะเบียนอุปกรณ์' },
+      loan:       { prefix:'LN',   digits:4, seq:43,  label:'ใบยืม-คืน (Loan)',             desc:'เลขที่ใบยืม-คืนอุปกรณ์' },
+      pm:         { prefix:'WO',   digits:4, seq:442, label:'PM Work Order',                desc:'ใบสั่งงานบำรุงรักษาตามแผน' },
+      cal:        { prefix:'CAL',  digits:4, seq:115, label:'Calibration WO',               desc:'ใบสั่งงานสอบเทียบมาตรฐาน' },
+      repair:     { prefix:'CM',   digits:4, seq:201, label:'ซ่อมบำรุง / CM',              desc:'เลขที่ใบแจ้งซ่อม (Corrective Maintenance)' },
+      incident:   { prefix:'INC',  digits:3, seq:31,  label:'รายงานเหตุการณ์ (Incident)',  desc:'เลขที่รายงานอุบัติการณ์' },
+      contract:   { prefix:'SC',   digits:3, seq:4,   label:'สัญญาบริการ (Contract)',       desc:'เลขที่สัญญาบริการ' },
+      safety:     { prefix:'EST',  digits:4, seq:21,  label:'ทดสอบไฟฟ้า (EST)',            desc:'เลขที่รายงานทดสอบ IEC 62353' },
+      spare:      { prefix:'SP',   digits:3, seq:8,   label:'อะไหล่ (Spare Part)',          desc:'รหัสรายการอะไหล่ในคลัง' },
+      fsca:       { prefix:'FSCA', digits:3, seq:0,   label:'FSCA/Recall Notice',           desc:'เลขที่แจ้งเตือนความปลอดภัย FSCA' },
+      incomingQC: { prefix:'QC',   digits:3, seq:0,   label:'Incoming QC',                  desc:'เลขที่ใบตรวจรับเครื่องมือ' },
+    }
   }
   ,safetyTests: [
     {id:'EST-0021',devId:'ME-0001',device:'Ventilator ICU',testDate:'2 เม.ย. 2567',tester:'Fluke ESA615',testerSerial:'FSA-12345',testerCal:'31 ธ.ค. 2567',devClass:'I',appType:'BF',earthRes:0.08,eqLeak:87,patLeak:7,appLeak:6,insRes:999,earthPass:true,eqLeakPass:true,patLeakPass:true,appLeakPass:true,insResPass:true,result:'ผ่าน (Pass)',tech:'วิชัย สุขดี',note:''},
@@ -306,6 +319,9 @@ const DB = {
     {id:'SC-003',title:'สัญญาซ่อม ECG & Defibrillator (GE/Zoll)',vendor:'GE Thai',contactPerson:'คุณประวิทย์',contactTel:'02-555-6789',type:'Parts Only',coveredDevices:['ME-0021','ME-0033'],startDate:'1 ก.พ. 2567',endDate:'28 พ.ค. 2567',endDateIso:'2024-05-28',value:45000,slaResponseHr:24,slaUptimePct:80,docRef:'สัญญาเลขที่ 012/2567',note:'อะไหล่แท้จาก GE เท่านั้น'},
     {id:'SC-004',title:'สัญญา Infusion Pump — B.Braun Service',vendor:'Health Supply',contactPerson:'คุณสมหญิง',contactTel:'02-987-6543',type:'Full Service',coveredDevices:['ME-0012'],startDate:'1 มี.ค. 2566',endDate:'28 ก.พ. 2567',endDateIso:'2024-02-28',value:38000,slaResponseHr:12,slaUptimePct:90,docRef:'สัญญาเลขที่ 033/2566',note:'สัญญาหมดแล้ว ต่ออายุ'},
   ]
+  ,fsca: []
+  ,incomingQC: []
+  ,spareTransactions: []
 };
 
 const ALERTS_DATA = [
