@@ -1,4 +1,4 @@
-﻿/* ════════════════════════════════
+﻿﻿/* ════════════════════════════════
    CUSTOM POPUP SYSTEM
 ════════════════════════════════ */
 let _popupResolve = null;
@@ -1695,10 +1695,10 @@ function renderPMChecklist(category) {
       if (item.type === 'check') {
         html += `<div class="chk-row" onclick="toggleDpmChk(this)" data-id="${item.id}" style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;margin-bottom:3px;background:var(--surface2)">`;
         html += `<div class="chk-box" style="width:18px;height:18px;min-width:18px;border:2px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;margin-top:1px"></div>`;
-        html += `<span style="font-size:12px;color:var(--text);line-height:1.4">${item.desc}</span></div>`;
+        html += `<span class="chk-label" style="font-size:12px;color:var(--text);line-height:1.4">${item.desc}</span></div>`;
       } else {
         html += `<div data-id="${item.id}" style="padding:6px 8px;border-radius:6px;margin-bottom:3px;background:var(--surface2)">`;
-        html += `<div style="font-size:12px;color:var(--text);margin-bottom:4px">${item.desc}</div>`;
+        html += `<div class="measure-label" style="font-size:12px;color:var(--text);margin-bottom:4px">${item.desc}</div>`;
         html += `<div style="display:flex;align-items:center;gap:6px">`;
         html += `<input type="number" step="any" placeholder="ค่าที่วัดได้" data-measure="${item.id}" oninput="updateDpmChkProgress()" style="width:110px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px">`;
         html += `<span style="font-size:11px;color:var(--text3)">${item.unit||''}</span>`;
@@ -1747,10 +1747,13 @@ function collectPMChecklistData() {
   if (!container) return [];
   const results = [];
   container.querySelectorAll('.chk-row').forEach(row => {
-    results.push({ id: row.dataset.id, type: 'check', value: row.classList.contains('checked') ? 'pass' : 'fail' });
+    const lbl = row.querySelector('.chk-label');
+    results.push({ id: row.dataset.id, label: lbl ? lbl.textContent : row.dataset.id, type: 'check', value: row.classList.contains('checked') ? 'pass' : 'fail' });
   });
   container.querySelectorAll('input[data-measure]').forEach(inp => {
-    results.push({ id: inp.dataset.measure, type: 'measure', value: inp.value.trim() });
+    const parent = inp.closest('div[data-id]');
+    const lbl = parent ? parent.querySelector('.measure-label') : null;
+    results.push({ id: inp.dataset.measure, label: lbl ? lbl.textContent : inp.dataset.measure, type: 'measure', value: inp.value.trim() });
   });
   return results;
 }
@@ -1848,6 +1851,17 @@ function renderPMHistoryHtml(p) {
   return h;
 }
 
+function getPMChecklistLabel(id) {
+  if (typeof PM_CHECKLISTS === 'undefined') return id;
+  for (const cat in PM_CHECKLISTS) {
+    for (const g of PM_CHECKLISTS[cat]) {
+      const f = g.items.find(i => i.id === id);
+      if (f) return f.desc;
+    }
+  }
+  return id;
+}
+
 function renderPMChecklistReadOnly(checklistData) {
   if(!checklistData || !checklistData.length) return '<div style="font-size:12px;color:var(--text3)">ไม่มีข้อมูล Checklist</div>';
   const checks   = checklistData.filter(x=>x.type==='check');
@@ -1859,13 +1873,13 @@ function renderPMChecklistReadOnly(checklistData) {
         <span style="width:18px;height:18px;border-radius:4px;background:${x.value==='pass'?'var(--teal)':'var(--surface2)'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
           ${x.value==='pass'?'<svg viewBox="0 0 10 8" style="width:10px;stroke:#fff;fill:none;stroke-width:2"><path d="M1 4l3 3 5-6"/></svg>':''}
         </span>
-        <span>${x.label||x.id}</span>
+            <span>${x.label || getPMChecklistLabel(x.id)}</span>
       </div>`).join('') + '</div>';
   }
   if(measures.length) {
     html += '<div style="margin-top:8px;display:grid;gap:4px">' + measures.map(x =>
       `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
-        <span style="color:var(--text2)">${x.label||x.id}</span>
+            <span style="color:var(--text2)">${x.label || getPMChecklistLabel(x.id)}</span>
         <span class="fw">${x.value||'—'}</span>
       </div>`).join('') + '</div>';
   }
@@ -1885,7 +1899,10 @@ function renderPMReadOnlyView(p) {
         <div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px">
             <span class="fw" style="color:var(--amber)">Correction #${i+1}</span>
-            <span style="color:var(--text3)">${c.at} · ${c.by}</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:var(--text3)">${c.at} · ${c.by}</span>
+              <button class="btn btn-sm" style="padding:2px 8px;font-size:10px;border-color:var(--border2);color:var(--text2)" onclick="printCorrectionNote('${p.id}', ${i})">🖨 พิมพ์</button>
+            </div>
           </div>
           <div style="color:var(--text2);margin-bottom:6px"><strong>เหตุผล:</strong> ${c.reason}</div>
           ${c.changes.map(ch=>`<div style="font-size:11px;color:var(--text3);padding:2px 0">${ch.field}: <span style="text-decoration:line-through;color:var(--red)">${ch.from||'—'}</span> → <span style="color:var(--teal)">${ch.to||'—'}</span></div>`).join('')}
@@ -1920,6 +1937,7 @@ function renderPMReadOnlyView(p) {
 
   drawerFoot.innerHTML = `
     <button class="btn" onclick="closeDrawer()">ปิด</button>
+    <button class="btn" style="border-color:var(--teal);color:var(--teal)" onclick="printPMWorkOrder('${p.id}')">🖨 พิมพ์${p.kind==='cal'?'ใบสอบเทียบ':'ใบงาน PM'}</button>
     <button class="btn" style="border-color:var(--amber);color:var(--amber)" onclick="openPMCorrectionForm('${p.id}')">
       <svg viewBox="0 0 16 16" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;margin-right:4px;vertical-align:middle"><path d="M10 2l4 4-8 8H2v-4z"/></svg>ขอแก้ไข (Correction Note)
     </button>
@@ -2068,6 +2086,7 @@ function openPMCorrectionForm(pmId) {
       <div class="ff span2"><label class="flabel">Traceability (NIMT)</label><input class="finput" id="corr-trace" placeholder="ไม่เปลี่ยน (เว้นว่าง)"></div>
       <div class="ff"><label class="flabel">ค่าใช้จ่าย (บาท)</label><input class="finput" type="number" id="corr-cost" placeholder="ไม่เปลี่ยน (เว้นว่าง)"></div>
     </div>
+    <div id="dpm-checklist-section" style="margin-top:16px"></div>
     <div style="background:var(--surface2);padding:12px;border-radius:var(--r);margin-top:16px;border:1px solid var(--border)">
       <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--teal)">21 CFR Part 11 — Electronic Signature</div>
       <div style="display:flex;gap:8px"><input type="password" class="finput" id="corr-pin" placeholder="กรอก PIN เพื่อยืนยัน Correction Note" autocomplete="new-password"></div>
@@ -2078,6 +2097,193 @@ function openPMCorrectionForm(pmId) {
     <button class="btn" onclick="openPMManageDrawer('${p.id}')">← กลับ</button>
     <button class="btn" style="border-color:var(--amber);color:var(--amber)" onclick="savePMCorrection()">บันทึก Correction Note</button>
   `;
+
+  const asset = DB.assets.find(a => a.id === p.devId);
+  renderPMChecklist(asset ? asset.category : '_default');
+  if (p.checklistData && p.checklistData.length) {
+    restorePMChecklistData(p.checklistData);
+  }
+}
+
+function printPMWorkOrder(pmId) {
+  const p = DB.pmList.find(x => x.id === pmId);
+  if (!p) { toast('ไม่พบข้อมูลแผนงาน', 'red'); return; }
+  const asset = DB.assets.find(a => a.id === p.devId) || {};
+
+  const today = new Date();
+  const printDate = `${today.getDate()} ${['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][today.getMonth()]} ${today.getFullYear()+543}`;
+  
+  const isCal = p.kind === 'cal';
+  const docTitle = isCal ? 'ใบรายงานผลการสอบเทียบเครื่องมือแพทย์ (Calibration Report)' : 'ใบรายงานผลการบำรุงรักษาเชิงป้องกัน (Preventive Maintenance Report)';
+
+  let checklistHtml = '';
+  if (p.checklistData && p.checklistData.length) {
+    checklistHtml = `
+      <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:14px">
+        <thead>
+          <tr>
+            <th style="width:40px; text-align:center; background:#f8fafc; border:1px solid #cbd5e1; padding:8px">#</th>
+            <th style="background:#f8fafc; border:1px solid #cbd5e1; padding:8px 12px; text-align:left">หัวข้อตรวจสอบ / สอบเทียบ</th>
+            <th style="width:140px; background:#f8fafc; border:1px solid #cbd5e1; padding:8px 12px; text-align:center">เกณฑ์ (Spec)</th>
+            <th style="width:140px; background:#f8fafc; border:1px solid #cbd5e1; padding:8px 12px; text-align:center">ผลลัพธ์</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${p.checklistData.map((chk, i) => {
+            const refItem = getPMChecklistItem(chk.id) || {};
+            const label = chk.label || refItem.desc || chk.id;
+            let specStr = refItem.spec ? `${refItem.spec} ${refItem.unit||''}` : '—';
+            let valStr = chk.value || '—';
+            let valColor = '#0f172a';
+            let valFontWeight = 'normal';
+
+            if (chk.type === 'check') {
+              if (chk.value === 'pass') { valStr = '✓ ผ่าน'; valColor = '#0d9488'; valFontWeight = '700'; }
+              else if (chk.value === 'fail') { valStr = '✗ ไม่ผ่าน'; valColor = '#dc2626'; valFontWeight = '700'; }
+              specStr = 'ผ่านเกณฑ์';
+            } else if (chk.type === 'measure') {
+              valStr = `${chk.value} ${refItem.unit||''}`;
+              valFontWeight = '700';
+              valColor = '#0284c7'; // สีฟ้าสำหรับค่า Measurement
+            }
+
+            return `
+              <tr>
+                <td style="text-align:center; border:1px solid #cbd5e1; padding:8px">${i + 1}</td>
+                <td style="border:1px solid #cbd5e1; padding:8px 12px">${label}</td>
+                <td style="text-align:center; border:1px solid #cbd5e1; padding:8px 12px; color:#64748b; font-size:13px">${specStr}</td>
+                <td style="text-align:center; border:1px solid #cbd5e1; padding:8px 12px; color:${valColor}; font-weight:${valFontWeight}">${valStr}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  } else {
+    checklistHtml = '<div style="color:#64748b; font-style:italic; margin-bottom:24px; text-align:center; padding:20px; border:1px dashed #cbd5e1; background:#f8fafc;">ไม่ได้บันทึกรายละเอียด Checklist / Measurement</div>';
+  }
+
+  const html = `
+    <div class="doc-header">
+      <div class="doc-logo">ศูนย์<br>เครื่องมือ<br>แพทย์</div>
+      <div class="doc-org">
+        <div class="doc-org-name">BMS HOSxP HOSPITAL — ศูนย์วิศวกรรมการแพทย์ (BMED)</div>
+        <div class="doc-org-sub">BMS HOSxP HOSPITAL</div>
+      </div>
+    </div>
+
+    <div class="doc-title-box">
+      <h3 style="color:#0d9488;border-bottom-color:#0d9488">${docTitle}</h3>
+    </div>
+
+    <div class="doc-meta">
+      <div class="doc-meta-item"><span class="lbl">Work Order:</span> <strong>${p.id}</strong></div>
+      <div class="doc-meta-item"><span class="lbl">ประเภทงาน:</span> ${p.type} ${p.calType ? '('+p.calType+')' : ''}</div>
+      <div class="doc-meta-item"><span class="lbl">สถานะ:</span> <span class="badge-status" style="background:#f0fdf4;color:#16a34a;border-color:#bbf7d0">${p.status}</span></div>
+      <div class="doc-meta-item"><span class="lbl">วันที่พิมพ์:</span> ${printDate}</div>
+    </div>
+
+    <div class="section-title">ข้อมูลเครื่องมือแพทย์ (Equipment Information)</div>
+    <div class="info-grid">
+      <div class="info-row"><span class="lbl">รหัสครุภัณฑ์:</span><span style="font-weight:700">${p.devId}</span></div>
+      <div class="info-row"><span class="lbl">ชื่ออุปกรณ์:</span><span>${asset.name || p.device}</span></div>
+      <div class="info-row"><span class="lbl">ยี่ห้อ / รุ่น:</span><span>${asset.mfr||'—'} / ${asset.model||'—'}</span></div>
+      <div class="info-row"><span class="lbl">Serial Number:</span><span>${asset.serial||'—'}</span></div>
+      <div class="info-row"><span class="lbl">หน่วยงาน / แผนก:</span><span>${asset.dept||'—'}</span></div>
+      <div class="info-row"><span class="lbl">ระดับความเสี่ยง:</span><span>${asset.risk||'—'}</span></div>
+    </div>
+
+    <div class="section-title">ผลการดำเนินงาน (Execution Results)</div>
+    <div class="info-grid">
+      <div class="info-row"><span class="lbl">ผลสรุป (Overall Result):</span><span style="font-weight:700;color:${p.result&&p.result.includes('ไม่ผ่าน')?'#dc2626':'#0d9488'}">${p.result || '—'}</span></div>
+      <div class="info-row"><span class="lbl">ผู้ดำเนินการ:</span><span>${p.resp || '—'}</span></div>
+      <div class="info-row"><span class="lbl">ค่าก่อนปรับ (As Found):</span><span>${p.before || '—'}</span></div>
+      <div class="info-row"><span class="lbl">ค่าหลังปรับ (As Left):</span><span>${p.after || '—'}</span></div>
+      <div class="info-row full"><span class="lbl">Traceability (เครื่องมืออ้างอิง):</span><span>${p.trace || '—'}</span></div>
+    </div>
+
+    <div class="section-title">${isCal ? 'ตารางบันทึกค่าการสอบเทียบ (Calibration Data)' : 'รายการตรวจสอบสภาพ (Checklist)'}</div>
+    ${checklistHtml}
+
+    <div class="sigs" style="margin-top:60px">
+      <div class="sig-box">
+        <div class="sig-line"></div>
+        <div class="sig-role">( ${p.signedBy || '...........................................'} )</div>
+        <div class="sig-date">ผู้ตรวจสอบ / สอบเทียบ (e-Signed)<br>วันที่: ${p.signedAt || '_____/_____/_____'}</div>
+      </div>
+      <div class="sig-box">
+        <div class="sig-line"></div>
+        <div class="sig-role">( ........................................... )</div>
+        <div class="sig-date">ผู้ทบทวน / อนุมัติผล (Reviewer)<br>วันที่: _____/_____/_____</div>
+      </div>
+    </div>
+  `;
+
+  printDocument(p.id + ' Report', html, p.id, 'portrait');
+}
+
+function printCorrectionNote(pmId, corrIndex) {
+  const p = DB.pmList.find(x => x.id === pmId);
+  if (!p || !p.corrections || !p.corrections[corrIndex]) { toast('ไม่พบข้อมูล Correction Note', 'red'); return; }
+  const c = p.corrections[corrIndex];
+  const asset = DB.assets.find(a => a.id === p.devId) || {};
+
+  const html = `
+    <div class="doc-header">
+      <div class="doc-logo">ศูนย์<br>เครื่องมือ<br>แพทย์</div>
+      <div class="doc-org">
+        <div class="doc-org-name">BMS HOSxP HOSPITAL — ศูนย์วิศวกรรมการแพทย์ (BMED)</div>
+        <div class="doc-org-sub">BMS HOSxP HOSPITAL</div>
+      </div>
+    </div>
+
+    <div class="doc-title-box">
+      <h3 style="color:#d97706;border-bottom-color:#d97706">บันทึกการแก้ไขข้อมูล (Correction Note)</h3>
+      <div style="margin-top:6px;font-size:14px;color:#475569">อ้างอิงใบงาน: <strong>${p.id}</strong> (21 CFR Part 11 Compliance)</div>
+    </div>
+
+    <div class="section-title">ข้อมูลอุปกรณ์และใบงานต้นฉบับ</div>
+    <div class="info-grid">
+      <div class="info-row"><span class="lbl">ใบงาน (Work Order):</span><span style="font-weight:700">${p.id}</span></div>
+      <div class="info-row"><span class="lbl">ประเภทงาน:</span><span>${p.type}</span></div>
+      <div class="info-row"><span class="lbl">รหัสครุภัณฑ์:</span><span style="font-weight:700">${p.devId}</span></div>
+      <div class="info-row"><span class="lbl">ชื่ออุปกรณ์:</span><span>${p.device}</span></div>
+    </div>
+
+    <div class="section-title" style="color:#d97706;border-bottom-color:#d97706">รายละเอียดการแก้ไข (Correction #${corrIndex + 1})</div>
+    <div style="margin-bottom:16px">
+      <strong>เหตุผลในการแก้ไข:</strong> ${c.reason}
+    </div>
+
+    <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:14px">
+      <thead>
+        <tr>
+          <th style="text-align:left; background:#f8fafc; border:1px solid #cbd5e1; padding:8px 12px">หัวข้อที่ถูกแก้ไข</th>
+          <th style="text-align:left; background:#f8fafc; border:1px solid #cbd5e1; padding:8px 12px">ข้อมูลเดิม (From)</th>
+          <th style="text-align:left; background:#f8fafc; border:1px solid #cbd5e1; padding:8px 12px">ข้อมูลใหม่ (To)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${c.changes.map(ch => `
+          <tr>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px">${ch.field}</td>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px; color:#dc2626; text-decoration:line-through">${ch.from || '—'}</td>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px; color:#0d9488; font-weight:600">${ch.to || '—'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <div class="sigs" style="margin-top:60px; justify-content:center">
+      <div class="sig-box" style="flex:none; width:300px">
+        <div class="sig-line"></div>
+        <div class="sig-role">( ${c.by} )</div>
+        <div class="sig-date">ผู้บันทึกการแก้ไข (e-Signed)<br>วัน-เวลา: ${c.at}</div>
+      </div>
+    </div>
+  `;
+
+  printDocument('Correction Note ' + p.id, html, p.id, 'portrait');
 }
 
 function savePMCorrection() {
@@ -2107,6 +2313,14 @@ function savePMCorrection() {
     const newCost = parseFloat(newCostRaw)||0;
     changes.push({field:'ค่าใช้จ่าย', from:String(p.cost||0), to:String(newCost)});
     p.cost = newCost;
+  }
+
+  const newChecklistData = collectPMChecklistData();
+  const oldChecklistStr = JSON.stringify(p.checklistData || []);
+  const newChecklistStr = JSON.stringify(newChecklistData);
+  if (newChecklistStr !== oldChecklistStr && newChecklistData.length > 0) {
+    changes.push({field:'Checklist', from:'ข้อมูลเดิม', to:'แก้ไขข้อมูลใหม่'});
+    p.checklistData = newChecklistData;
   }
 
   if(!changes.length) { toast('ไม่มีข้อมูลที่เปลี่ยนแปลง — ระบุค่าใหม่อย่างน้อย 1 รายการ','amber'); return; }
@@ -4048,56 +4262,65 @@ function initReportCharts() {
    PRINT DOCUMENTS
 ════════════════════════════════ */
 function printDocument(title, content, qrData, orientation='portrait') {
-  const w = window.open('', '_blank', 'width=850,height=1000');
+  const w = window.open('', '_blank', 'width=900,height=1000');
   w.document.write(`
-    <html><head><title>${title}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+    <meta charset="UTF-8">
+    <title>${title}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: 'Noto Sans Thai', sans-serif; font-size: 13px; line-height: 1.6; color: #000; padding: 32px 40px; }
+      body { font-family: 'Sarabun', sans-serif; font-size: 14px; line-height: 1.5; color: #000; padding: 40px 50px; }
       h2, h3, h4 { margin: 0; }
-      .doc-header { display: flex; align-items: center; gap: 16px; border-bottom: 2.5px solid #0d9488; padding-bottom: 12px; margin-bottom: 18px; }
-      .doc-logo { width: 60px; height: 60px; background: #0d9488; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; text-align: center; flex-shrink: 0; padding: 4px; }
+      .doc-header { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #0d9488; padding-bottom: 16px; margin-bottom: 24px; }
+      .doc-logo { width: 64px; height: 64px; background: #0d9488; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 700; text-align: center; flex-shrink: 0; line-height: 1.2; }
       .doc-org { flex: 1; }
-      .doc-org-name { font-size: 15px; font-weight: 700; }
-      .doc-org-sub { font-size: 12px; color: #555; margin-top: 2px; }
-      .doc-title-box { text-align: center; margin-bottom: 18px; }
-      .doc-title-box h3 { font-size: 15px; font-weight: 700; border-bottom: 1.5px solid #000; display: inline-block; padding-bottom: 4px; }
-      .doc-meta { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 6px 24px; }
-      .doc-meta-item { font-size: 12px; }
-      .doc-meta-item .lbl { font-weight: 700; }
-      .section-title { font-size: 12px; font-weight: 700; color: #fff; background: #0d9488; padding: 4px 10px; border-radius: 4px; margin: 14px 0 8px; }
-      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-bottom: 8px; }
-      .info-row { display: flex; gap: 6px; font-size: 12px; padding: 3px 0; border-bottom: 1px dotted #ccc; }
-      .info-row .lbl { font-weight: 600; min-width: 130px; flex-shrink: 0; color: #333; }
+      .doc-org-name { font-size: 18px; font-weight: 700; color: #0f172a; }
+      .doc-org-sub { font-size: 13px; color: #475569; margin-top: 2px; }
+      #qr-container { background: #fff; padding: 4px; border: 1px solid #e2e8f0; border-radius: 8px; }
+      .doc-title-box { text-align: center; margin-bottom: 24px; }
+      .doc-title-box h3 { font-size: 18px; font-weight: 700; display: inline-block; padding-bottom: 4px; }
+      .doc-meta { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px 32px; }
+      .doc-meta-item { font-size: 14px; }
+      .doc-meta-item .lbl { font-weight: 700; color: #475569; margin-right: 4px; }
+      .section-title { font-size: 15px; font-weight: 700; color: #0d9488; border-bottom: 2px solid #0d9488; padding-bottom: 4px; margin: 24px 0 12px; }
+      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin-bottom: 16px; }
+      .info-box { border: 1px solid #cbd5e1; padding: 12px 16px; border-radius: 8px; background: #f8fafc; }
+      .info-row { display: flex; gap: 8px; font-size: 14px; padding: 4px 0; border-bottom: 1px dotted #cbd5e1; }
+      .info-row .lbl { font-weight: 700; min-width: 140px; flex-shrink: 0; color: #475569; }
       .info-row.full { grid-column: span 2; }
-      .sym-box { border: 1px solid #ccc; border-radius: 4px; padding: 8px 12px; min-height: 48px; font-size: 12px; margin-bottom: 12px; }
-      table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
-      th, td { border: 1px solid #aaa; padding: 6px 8px; }
-      th { background: #e9ecef; font-weight: 700; text-align: center; }
-      .sigs { display: flex; justify-content: space-around; margin-top: 40px; gap: 12px; }
-      .sig-box { text-align: center; flex: 1; }
-      .sig-line { border-bottom: 1px dashed #666; height: 40px; margin-bottom: 6px; }
-      .sig-role { font-size: 12px; font-weight: 700; }
-      .sig-date { font-size: 11px; color: #555; margin-top: 4px; }
+      .sym-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; min-height: 60px; font-size: 14px; margin-bottom: 16px; background: #fff; }
+      table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+      th, td { border: 1px solid #94a3b8; padding: 8px 12px; }
+      th { background: #f1f5f9; font-weight: 700; text-align: center; color: #0f172a; }
+      .sigs { display: flex; justify-content: space-between; margin-top: 40px; gap: 24px; text-align: center; }
+      .sig-box { flex: 1; }
+      .sig-line { border-bottom: 1px dashed #475569; height: 50px; margin-bottom: 8px; }
+      .sig-role { font-size: 14px; font-weight: 700; color: #0f172a; }
+      .sig-date { font-size: 13px; color: #64748b; margin-top: 4px; }
       .badge-status { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; background: #fef3c7; color: #d97706; border: 1px solid #fcd34d; }
-      .official-header { text-align: center; margin-bottom: 16px; }
-      .official-from { margin: 12px 0; font-size: 13px; }
-      .official-from div { margin-bottom: 4px; }
-      .official-subject { margin: 12px 0; font-size: 13px; }
-      .body-text { font-size: 13px; line-height: 2; text-indent: 2em; margin-bottom: 8px; }
-      .approve-table td { padding: 8px 12px; }
-      .no-print { display: none; }
-      @media print { body { padding: 12px 20px; } @page { margin: 1.2cm; size: A4 ${orientation}; } }
+      .official-from { margin: 12px 0; font-size: 15px; }
+      .official-from div { margin-bottom: 6px; }
+      .body-text { font-size: 15px; line-height: 1.8; text-indent: 2.5em; margin-bottom: 12px; }
+      .footer-note { font-size: 12px; color: #94a3b8; text-align: right; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+      @media print { 
+        body { padding: 0; } 
+        @page { margin: 15mm; size: A4 ${orientation}; } 
+        .info-box, .doc-meta { background: transparent !important; }
+        th { background-color: #e2e8f0 !important; -webkit-print-color-adjust: exact; }
+      }
     </style>
     </head><body>
     ${content}
+    <div class="footer-note">พิมพ์จากระบบ MedTrack Management System</div>
     <script>
       window.onload = function() {
         var qrc = document.getElementById("qr-container");
-        if(qrc && "${qrData}") { new QRCode(qrc, {text:"${qrData}", width:64, height:64, colorDark:"#000", colorLight:"#fff"}); }
-        setTimeout(function(){ window.print(); window.close(); }, 700);
+        if(qrc && "${qrData}") { new QRCode(qrc, {text:"${qrData}", width:70, height:70, colorDark:"#0f172a", colorLight:"#ffffff"}); }
+        setTimeout(function(){ window.print(); }, 800);
       }
     <\/script>
     </body></html>
@@ -4111,51 +4334,70 @@ function printLoanForm(id) {
   
   let itemsHtml = loan.items.map((it, idx) => {
     const a = DB.assets.find(x => x.id === it.allocId) || DB.assets.find(x => x.id === it.reqId) || {name: it.name, mfr: '-', model: '-', serial: '-'};
-    return `<tr>
-      <td style="text-align:center">${idx+1}</td>
-      <td>${it.allocId}</td>
-      <td>${a.name}</td>
-      <td>${a.mfr || '-'} / ${a.model || '-'}</td>
-      <td>${a.serial || '-'}</td>
-    </tr>`;
+      return `<tr>
+        <td style="text-align:center">${idx+1}</td>
+        <td style="font-weight:600">${it.allocId}</td>
+        <td>${a.name}</td>
+        <td>${a.mfr || '-'} / ${a.model || '-'}</td>
+        <td>${a.serial || '-'}</td>
+      </tr>`;
   }).join('');
 
   const html = `
-    <div class="header">
-      <img src="https://placehold.co/100x100/0d9488/white?text=LOGO" alt="Logo" class="logo">
-      <div class="header-text">
-        <h2>ศูนย์เครื่องมือแพทย์ (BMED) รพ.สงขลานครินทร์</h2>
-        <h3>ใบยืม-คืนเครื่องมือแพทย์ (Loan & Return Form)</h3>
+      <div class="doc-header">
+        <div class="doc-logo">ศูนย์<br>เครื่องมือ<br>แพทย์</div>
+        <div class="doc-org">
+          <div class="doc-org-name">BMS HOSxP HOSPITAL — ศูนย์วิศวกรรมการแพทย์ (BMED)</div>
+          <div class="doc-org-sub">BMS HOSxP HOSPITAL</div>
       </div>
       <div id="qr-container"></div>
     </div>
-    <div class="row">
-      <div class="col"><span class="label">รหัสใบยืม:</span> ${loan.id}</div>
-      <div class="col"><span class="label">วันที่ยืม:</span> ${loan.loanDate}</div>
-      <div class="col"><span class="label">กำหนดคืน:</span> ${loan.due}</div>
+
+      <div class="doc-title-box"><h3>ใบยืม-คืน เครื่องมือแพทย์ (Loan & Return Form)</h3></div>
+
+      <div class="doc-meta">
+        <div class="doc-meta-item"><span class="lbl">เลขที่ใบยืม:</span> <strong>${loan.id}</strong></div>
+        <div class="doc-meta-item"><span class="lbl">วันที่พิมพ์:</span> ${new Date().toLocaleDateString('th-TH')}</div>
     </div>
-    <div class="row">
-      <div class="col"><span class="label">ผู้ยืม:</span> ${loan.borrower}</div>
-      <div class="col"><span class="label">หน่วยงาน/แผนก:</span> ${loan.dept}</div>
-      <div class="col"><span class="label">วัตถุประสงค์:</span> ${loan.reason}</div>
+
+      <div class="section-title">ส่วนที่ 1: ข้อมูลการยืม</div>
+      <div class="info-grid">
+        <div class="info-box">
+          <div class="info-row"><span class="lbl">ชื่อผู้ยืม:</span><span>${loan.borrower}</span></div>
+          <div class="info-row"><span class="lbl">หน่วยงาน/แผนก:</span><span>${loan.dept}</span></div>
+          <div class="info-row"><span class="lbl">วัตถุประสงค์:</span><span>${loan.reason}</span></div>
+          <div class="info-row"><span class="lbl">วันที่ยืม:</span><span>${loan.loanDate}</span></div>
+          <div class="info-row"><span class="lbl">กำหนดคืน:</span><span style="color:#dc2626;font-weight:700">${loan.due}</span></div>
+        </div>
+        <div class="info-box">
+          <div style="font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color:#0f172a">ข้อมูลผู้ป่วย (กรณีใช้กับผู้ป่วย)</div>
+          <div class="info-row"><span class="lbl">HN:</span><span>${loan.hn || '-'}</span></div>
+          <div class="info-row"><span class="lbl">สิทธิ์การรักษา:</span><span>${loan.rights || '-'}</span></div>
+          <div class="info-row"><span class="lbl">Diagnosis:</span><span>${loan.dx || '-'}</span></div>
+        </div>
     </div>
-    ${loan.hn ? `
-    <div class="row">
-      <div class="col"><span class="label">HN ผู้ป่วย:</span> ${loan.hn}</div>
-      <div class="col"><span class="label">สิทธิ์:</span> ${loan.rights || '-'}</div>
-      <div class="col"><span class="label">โรค (Dx):</span> ${loan.dx || '-'}</div>
-    </div>` : ''}
-    <div class="row">
-      <div class="col"><span class="label">หมายเหตุ:</span> ${loan.note || '-'}</div>
-    </div>
+
+      <div class="section-title">ส่วนที่ 2: รายการเครื่องมือแพทย์ที่ยืม</div>
     <table>
-      <thead><tr><th style="width:50px;text-align:center">ลำดับ</th><th>รหัสครุภัณฑ์</th><th>รายการเครื่องมือแพทย์</th><th>ยี่ห้อ / รุ่น</th><th>Serial Number</th></tr></thead>
+        <thead><tr><th style="width:50px">ลำดับ</th><th style="width:140px">รหัสอุปกรณ์</th><th>ชื่อรายการ</th><th>ยี่ห้อ / รุ่น</th><th style="width:140px">Serial Number</th></tr></thead>
       <tbody>${itemsHtml}</tbody>
     </table>
-    <div class="signatures">
-      <div class="sig-box"><div class="sig-line"></div><div>ผู้ยืม (Borrower)</div><div style="margin-top:5px;font-size:12px">วันที่: ______/______/______</div></div>
-      <div class="sig-box"><div class="sig-line"></div><div>ผู้ส่งมอบ (BMED Deliverer)</div><div style="margin-top:5px;font-size:12px">วันที่: ______/______/______</div></div>
-      <div class="sig-box"><div class="sig-line"></div><div>ผู้รับคืน (BMED Receiver)</div><div style="margin-top:5px;font-size:12px">วันที่: ______/______/______</div></div>
+      <div class="info-row full" style="border:none;margin-top:8px"><span class="lbl" style="min-width:100px">หมายเหตุเพิ่มเติม:</span><span>${loan.note || '-'}</span></div>
+
+      <div class="sigs">
+        <div class="sig-box"><div class="sig-line"></div><div class="sig-role">( ${loan.borrower} )</div><div class="sig-date">ผู้ยืม / ผู้รับมอบอุปกรณ์<br>วันที่: ______/______/______</div></div>
+        <div class="sig-box"><div class="sig-line"></div><div class="sig-role">( .................................................... )</div><div class="sig-date">เจ้าหน้าที่ศูนย์ฯ ผู้ส่งมอบ<br>วันที่: ______/______/______</div></div>
+      </div>
+
+      <div class="section-title" style="margin-top: 40px;">ส่วนที่ 3: สำหรับเจ้าหน้าที่ (เมื่อรับคืน)</div>
+      <div class="info-box" style="display: flex; justify-content: space-between;">
+        <div style="font-size:14px"><span class="lbl" style="font-weight:700;color:#475569">วันที่รับคืนจริง:</span> ______/______/______</div>
+        <div style="font-size:14px"><span class="lbl" style="font-weight:700;color:#475569">สภาพเครื่องเมื่อรับคืน:</span> [ &nbsp; ] ปกติ &nbsp;&nbsp; [ &nbsp; ] ชำรุด/สูญหาย</div>
+      </div>
+      
+      <div class="sigs">
+        <div class="sig-box"><div class="sig-line"></div><div class="sig-role">( .................................................... )</div><div class="sig-date">ผู้ส่งคืนอุปกรณ์<br>วันที่: ______/______/______</div></div>
+        <div class="sig-box"><div class="sig-line"></div><div class="sig-role">( .................................................... )</div><div class="sig-date">เจ้าหน้าที่ศูนย์ฯ ผู้รับคืน<br>วันที่: ______/______/______</div></div>
     </div>
   `;
   printDocument('ใบยืม-คืน ' + loan.id, html, loan.id);
@@ -4173,15 +4415,15 @@ function printRepairForm(id) {
   const printDate = `${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()+543}`;
 
   const pastRows = pastRepairs.length
-    ? pastRepairs.map((pr,i) => `<tr><td style="text-align:center">${i+1}</td><td>${pr.id}</td><td>${pr.date}</td><td>${pr.sym}</td><td>${pr.status}</td><td>${pr.cost ? pr.cost.toLocaleString()+' ฿' : '—'}</td></tr>`).join('')
-    : `<tr><td colspan="6" style="text-align:center;color:#888">ไม่มีประวัติการซ่อมก่อนหน้า</td></tr>`;
+        ? pastRepairs.map((pr,i) => `<tr><td style="text-align:center">${i+1}</td><td>${pr.id}</td><td>${pr.date}</td><td>${pr.sym}</td><td>${pr.status}</td><td>${pr.cost ? pr.cost.toLocaleString()+' ฿' : '—'}</td></tr>`).join('')
+        : `<tr><td colspan="6" style="text-align:center;color:#94a3b8">ไม่มีประวัติการซ่อมก่อนหน้า</td></tr>`;
 
   const html = `
     <div class="doc-header">
       <div class="doc-logo">ศูนย์<br>เครื่องมือ<br>แพทย์</div>
       <div class="doc-org">
-        <div class="doc-org-name">โรงพยาบาลสงขลานครินทร์ — ศูนย์วิศวกรรมการแพทย์ (BMED)</div>
-        <div class="doc-org-sub">Faculty of Medicine, Prince of Songkla University Hospital</div>
+        <div class="doc-org-name">BMS HOSxP HOSPITAL — ศูนย์วิศวกรรมการแพทย์ (BMED)</div>
+        <div class="doc-org-sub">BMS HOSxP HOSPITAL</div>
       </div>
       <div id="qr-container"></div>
     </div>
@@ -4201,19 +4443,19 @@ function printRepairForm(id) {
       <div class="info-row"><span class="lbl">ผู้แจ้งซ่อม:</span><span>${r.reporter || '—'}</span></div>
       <div class="info-row"><span class="lbl">หน่วยงาน / แผนก:</span><span>${asset.dept || '—'}</span></div>
       <div class="info-row"><span class="lbl">สถานที่ซ่อม:</span><span>${r.location || '—'}</span></div>
-      <div class="info-row"><span class="lbl">ประเภทงาน:</span><span>${r.ext ? 'ส่งซ่อมภายนอก (External)' : 'ซ่อมหน้างาน (Internal)'}</span></div>
+        <div class="info-row"><span class="lbl">ประเภทงาน:</span><span style="font-weight:700;color:var(--teal)">${r.ext ? 'ส่งซ่อมภายนอก (External)' : 'ซ่อมหน้างาน (Internal)'}</span></div>
     </div>
 
     <div class="section-title">ข้อมูลเครื่องมือแพทย์</div>
     <div class="info-grid">
-      <div class="info-row"><span class="lbl">รหัสครุภัณฑ์:</span><span>${r.devId}</span></div>
+        <div class="info-row"><span class="lbl">รหัสครุภัณฑ์:</span><span style="font-weight:700">${r.devId}</span></div>
       <div class="info-row"><span class="lbl">ชื่ออุปกรณ์:</span><span>${asset.name || r.device}</span></div>
       <div class="info-row"><span class="lbl">ยี่ห้อ / รุ่น:</span><span>${asset.mfr||'—'} / ${asset.model||'—'}</span></div>
       <div class="info-row"><span class="lbl">Serial Number:</span><span>${asset.serial||'—'}</span></div>
       <div class="info-row"><span class="lbl">ทะเบียน อย.:</span><span>${asset.fda||'—'}</span></div>
       <div class="info-row"><span class="lbl">ระดับความเสี่ยง:</span><span>${asset.risk||'—'}</span></div>
       <div class="info-row"><span class="lbl">รหัส สนย.:</span><span>${asset.sny||'—'}</span></div>
-      <div class="info-row"><span class="lbl">บริษัทผู้จัดจำหน่าย:</span><span>${asset.vendor||'—'}</span></div>
+        <div class="info-row"><span class="lbl">บริษัทตัวแทนจำหน่าย:</span><span>${asset.vendor||'—'}</span></div>
     </div>
 
     <div class="section-title">อาการเสียที่พบ</div>
@@ -4223,8 +4465,8 @@ function printRepairForm(id) {
     <div class="info-grid">
       <div class="info-row"><span class="lbl">ช่างผู้รับผิดชอบ:</span><span>${r.tech || '—'}</span></div>
       <div class="info-row"><span class="lbl">สาเหตุการชำรุด:</span><span>${r.cause || '—'}</span></div>
-      <div class="info-row"><span class="lbl">รายการอะไหล่ที่ใช้:</span><span>${r.parts || '—'}</span></div>
-      <div class="info-row"><span class="lbl">ค่าใช้จ่ายการซ่อม:</span><span>${r.cost ? r.cost.toLocaleString()+' บาท' : '—'}</span></div>
+        <div class="info-row full"><span class="lbl">รายการอะไหล่ที่ใช้:</span><span>${r.parts || '—'}</span></div>
+        <div class="info-row"><span class="lbl">ค่าใช้จ่ายการซ่อม:</span><span style="font-weight:700">${r.cost ? r.cost.toLocaleString()+' บาท' : '—'}</span></div>
     </div>
 
     <div class="section-title">ประวัติการซ่อมก่อนหน้า (Repair History)</div>
@@ -4233,10 +4475,26 @@ function printRepairForm(id) {
       <tbody>${pastRows}</tbody>
     </table>
 
+    <div class="section-title">ภาพถ่ายประกอบการแจ้งซ่อม / การซ่อมบำรุง</div>
+    <table style="table-layout: fixed; margin-bottom: 20px;">
+      <tbody>
+        <tr style="height: 220px;">
+          <td style="text-align: center; color: #64748b; width: 50%; border: 1.5px dashed #94a3b8; background: #f8fafc;">
+            <svg viewBox="0 0 24 24" style="width:36px;height:36px;stroke:currentColor;fill:none;stroke-width:1.5;margin-bottom:12px;opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><br>
+            [ ติดรูปภาพที่ 1 : สภาพก่อนซ่อม / จุดที่ชำรุด ]
+          </td>
+          <td style="text-align: center; color: #64748b; width: 50%; border: 1.5px dashed #94a3b8; background: #f8fafc;">
+            <svg viewBox="0 0 24 24" style="width:36px;height:36px;stroke:currentColor;fill:none;stroke-width:1.5;margin-bottom:12px;opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><br>
+            [ ติดรูปภาพที่ 2 : สภาพหลังซ่อม / อะไหล่ที่เปลี่ยน ]
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
     <div class="sigs">
-      <div class="sig-box"><div class="sig-line"></div><div class="sig-role">ผู้แจ้งซ่อม</div><div class="sig-date">วันที่ _____ / _____ / _____</div></div>
-      <div class="sig-box"><div class="sig-line"></div><div class="sig-role">ช่างผู้รับผิดชอบ</div><div class="sig-date">วันที่ _____ / _____ / _____</div></div>
-      <div class="sig-box"><div class="sig-line"></div><div class="sig-role">หัวหน้าศูนย์วิศวกรรมฯ</div><div class="sig-date">วันที่ _____ / _____ / _____</div></div>
+        <div class="sig-box"><div class="sig-line"></div><div class="sig-role">( ${r.reporter || '...........................................'} )</div><div class="sig-date">ผู้แจ้งซ่อม<br>วันที่ _____ / _____ / _____</div></div>
+        <div class="sig-box"><div class="sig-line"></div><div class="sig-role">( ${r.tech || '...........................................'} )</div><div class="sig-date">ช่างผู้รับผิดชอบ<br>วันที่ _____ / _____ / _____</div></div>
+        <div class="sig-box"><div class="sig-line"></div><div class="sig-role">( ........................................... )</div><div class="sig-date">หัวหน้าศูนย์วิศวกรรมการแพทย์<br>วันที่ _____ / _____ / _____</div></div>
     </div>
   `;
   printDocument('ใบแจ้งซ่อม ' + r.id, html, r.id, 'portrait');
@@ -4270,8 +4528,8 @@ function printRepairApproval(id) {
     <div class="doc-header">
       <div class="doc-logo">ศูนย์<br>เครื่องมือ<br>แพทย์</div>
       <div class="doc-org">
-        <div class="doc-org-name">โรงพยาบาลสงขลานครินทร์ — ศูนย์วิศวกรรมการแพทย์ (BMED)</div>
-        <div class="doc-org-sub">Faculty of Medicine, Prince of Songkla University Hospital</div>
+        <div class="doc-org-name">BMS HOSxP HOSPITAL — ศูนย์วิศวกรรมการแพทย์ (BMED)</div>
+        <div class="doc-org-sub">BMS HOSxP HOSPITAL</div>
       </div>
       <div id="qr-container"></div>
     </div>
@@ -4279,61 +4537,60 @@ function printRepairApproval(id) {
     <div class="doc-title-box"><h3>บันทึกขออนุมัติดำเนินการซ่อมบำรุงเครื่องมือแพทย์</h3></div>
 
     <div class="official-from">
-      <div><strong>ที่:</strong> &nbsp;&nbsp;&nbsp; รพ.สข./บมพ. ${r.id} / ${today.getFullYear()+543}</div>
-      <div><strong>วันที่:</strong> &nbsp; ${printDate}</div>
+          <div><strong style="display:inline-block;width:50px">ที่:</strong> BMS/บมพ. ${r.id} / ${today.getFullYear()+543}</div>
+          <div><strong style="display:inline-block;width:50px">วันที่:</strong> ${printDate}</div>
     </div>
     <div class="official-from">
-      <div><strong>เรื่อง:</strong> &nbsp; ขออนุมัติหลักการดำเนินการซ่อมบำรุงเครื่องมือแพทย์ ${asset.name || r.device} (${r.devId})</div>
-      <div><strong>เรียน:</strong> &nbsp; ${approvalLevel}</div>
+          <div><strong style="display:inline-block;width:50px">เรื่อง:</strong> ขออนุมัติหลักการดำเนินการซ่อมบำรุงเครื่องมือแพทย์ ${asset.name || r.device} (${r.devId})</div>
+          <div><strong style="display:inline-block;width:50px">เรียน:</strong> ${approvalLevel}</div>
     </div>
 
-    <p class="body-text">ด้วยศูนย์วิศวกรรมการแพทย์ได้รับแจ้งว่าเครื่องมือแพทย์รายการดังกล่าวชำรุดเสียหาย ไม่สามารถใช้งานได้ตามปกติ ศูนย์ฯ จึงขออนุมัติหลักการดำเนินการซ่อมบำรุง เพื่อให้เครื่องมือแพทย์สามารถกลับมาใช้งานได้ตามมาตรฐาน</p>
+        <p class="body-text">ด้วยศูนย์วิศวกรรมการแพทย์ได้รับแจ้งว่าเครื่องมือแพทย์รายการดังกล่าวชำรุดเสียหาย ไม่สามารถใช้งานได้ตามปกติ ศูนย์ฯ จึงขออนุมัติหลักการดำเนินการซ่อมบำรุง เพื่อให้เครื่องมือแพทย์สามารถกลับมาใช้งานได้ตามมาตรฐานและมีความปลอดภัยต่อผู้ป่วย</p>
 
     <div class="section-title">รายละเอียดเครื่องมือแพทย์</div>
     <div class="info-grid">
-      <div class="info-row"><span class="lbl">รหัสครุภัณฑ์:</span><span>${r.devId}</span></div>
+          <div class="info-row"><span class="lbl">รหัสครุภัณฑ์:</span><span style="font-weight:700">${r.devId}</span></div>
       <div class="info-row"><span class="lbl">ชื่ออุปกรณ์:</span><span>${asset.name || r.device}</span></div>
       <div class="info-row"><span class="lbl">ยี่ห้อ / รุ่น:</span><span>${asset.mfr||'—'} / ${asset.model||'—'}</span></div>
       <div class="info-row"><span class="lbl">Serial Number:</span><span>${asset.serial||'—'}</span></div>
       <div class="info-row"><span class="lbl">ทะเบียน อย.:</span><span>${asset.fda||'—'}</span></div>
       <div class="info-row"><span class="lbl">ระดับความเสี่ยง:</span><span>${asset.risk||'—'}</span></div>
-      <div class="info-row"><span class="lbl">หน่วยงานที่รับผิดชอบ:</span><span>${asset.dept||'—'}</span></div>
-      <div class="info-row"><span class="lbl">วันแจ้งซ่อม:</span><span>${r.date}</span></div>
+          <div class="info-row"><span class="lbl">หน่วยงานรับผิดชอบ:</span><span>${asset.dept||'—'}</span></div>
     </div>
 
-    <div class="section-title">สาเหตุและอาการ</div>
+        <div class="section-title">สาเหตุและอาการชำรุด</div>
     <div class="sym-box">${r.sym || '—'}</div>
 
     <div class="section-title">รายละเอียดงานซ่อมและประมาณการค่าใช้จ่าย</div>
     <table>
       <thead><tr><th>รายการ</th><th>รายละเอียด</th></tr></thead>
       <tbody>
-        <tr><td>ประเภทการซ่อม</td><td>${r.ext ? 'ส่งซ่อมภายนอก (External Vendor)' : 'ซ่อมหน้างานโดยช่างภายใน'}</td></tr>
-        <tr><td>บริษัทที่รับซ่อม / ช่างผู้รับผิดชอบ</td><td>${r.tech || '—'}</td></tr>
-        <tr><td>สาเหตุการชำรุด</td><td>${r.cause || 'อยู่ระหว่างการวินิจฉัย'}</td></tr>
-        <tr><td>อะไหล่ที่ต้องใช้</td><td>${r.parts || '—'}</td></tr>
-        <tr><td style="font-weight:700">ประมาณการค่าซ่อม</td><td style="font-weight:700;color:#c00">${costStr}</td></tr>
-        <tr><td>ระดับผู้อนุมัติที่ต้องการ</td><td>${approvalLevel}</td></tr>
+            <tr><td style="font-weight:700;width:35%">ประเภทการซ่อม</td><td>${r.ext ? 'ส่งซ่อมภายนอก (External Vendor)' : 'ซ่อมหน้างานโดยช่างภายใน'}</td></tr>
+            <tr><td style="font-weight:700">บริษัท / ช่างผู้รับผิดชอบ</td><td>${r.tech || '—'}</td></tr>
+            <tr><td style="font-weight:700">สาเหตุการชำรุด</td><td>${r.cause || 'อยู่ระหว่างการวินิจฉัย'}</td></tr>
+            <tr><td style="font-weight:700">อะไหล่ที่ต้องใช้</td><td>${r.parts || '—'}</td></tr>
+            <tr><td style="font-weight:700">ประมาณการค่าซ่อม</td><td style="font-weight:700;color:#dc2626">${costStr}</td></tr>
+            <tr><td style="font-weight:700">ระดับผู้อนุมัติ</td><td>${approvalLevel}</td></tr>
       </tbody>
     </table>
 
     <p class="body-text">จึงเรียนมาเพื่อโปรดพิจารณาอนุมัติ และหากมีข้อสงสัยประการใด กรุณาติดต่อ ศูนย์วิศวกรรมการแพทย์ โทร. 074-451-xxx</p>
 
-    <div class="sigs" style="margin-top:50px">
+        <div class="sigs" style="margin-top:60px">
       <div class="sig-box">
         <div class="sig-line"></div>
-        <div class="sig-role">ผู้เสนอ (ช่างวิศวกรรม)</div>
-        <div class="sig-date">วันที่ _____ / _____ / _____</div>
+            <div class="sig-role">( ${r.tech || '...........................................'} )</div>
+            <div class="sig-date">ผู้เสนอ (ช่างวิศวกรรม)<br>วันที่ _____ / _____ / _____</div>
       </div>
       <div class="sig-box">
         <div class="sig-line"></div>
-        <div class="sig-role">หัวหน้าศูนย์วิศวกรรมการแพทย์</div>
-        <div class="sig-date">วันที่ _____ / _____ / _____</div>
+            <div class="sig-role">( ........................................... )</div>
+            <div class="sig-date">หัวหน้าศูนย์วิศวกรรมการแพทย์<br>วันที่ _____ / _____ / _____</div>
       </div>
       <div class="sig-box">
         <div class="sig-line"></div>
-        <div class="sig-role">${approvalSig}</div>
-        <div class="sig-date">วันที่ _____ / _____ / _____</div>
+            <div class="sig-role">( ........................................... )</div>
+            <div class="sig-date">${approvalSig}<br>วันที่ _____ / _____ / _____</div>
       </div>
     </div>
   `;
@@ -4505,6 +4762,16 @@ document.addEventListener('DOMContentLoaded',()=>{
   renderIncomingQC();
   populateRepairDevices();
   updateFSCANavBadge();
+  
+  // Hide Splash Screen
+  setTimeout(() => {
+    const splash = document.getElementById('splash-screen');
+    if (splash) {
+      splash.style.opacity = '0';
+      splash.style.visibility = 'hidden';
+      setTimeout(() => splash.remove(), 500);
+    }
+  }, 1500);
 });
 /* ════════════════════════════════════════════════════════════════
    ITEM 3 — ISO 14971 NUMERICAL RISK SCORE (5x5 Matrix)
@@ -4994,3 +5261,47 @@ function exportComplianceCSV() {
   toast('ดาวน์โหลด CSV สำเร็จ', 'teal');
 }
 
+/* ════════════════════════════════════════════════════════════════
+   PRINT ASSET LABEL (QR CODE STICKER)
+════════════════════════════════════════════════════════════════ */
+function printAssetLabel(id) {
+  const a = DB.assets.find(x => x.id === id);
+  if (!a) { toast('ไม่พบข้อมูลอุปกรณ์', 'red'); return; }
+  
+  const printWindow = window.open('', '_blank', 'width=500,height=400');
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+      <meta charset="UTF-8">
+      <title>Print Label - ${a.id}</title>
+      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+      <style>
+        @media print { @page { margin: 0; size: auto; } body { margin: 0; } }
+        body { font-family: 'Sarabun', sans-serif; display: flex; justify-content: center; padding-top: 20px; }
+        .label-box { width: 6.5cm; height: 3.5cm; border: 1px solid #cbd5e1; padding: 10px; display: flex; align-items: center; gap: 12px; border-radius: 8px; }
+        .info { font-size: 11px; line-height: 1.3; color: #0f172a; flex: 1; overflow: hidden; }
+        .title { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+        .dept { font-size: 10px; padding: 2px 6px; background: #e2e8f0; border-radius: 4px; display: inline-block; margin-top: 4px; }
+      </style>
+    </head>
+    <body>
+      <div class="label-box">
+        <div id="qr-code"></div>
+        <div class="info">
+          <div class="title">${a.id}</div>
+          <div style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${a.name}</div>
+          <div>S/N: ${a.serial || '-'}</div>
+          <div class="dept">แผนก: ${a.dept}</div>
+        </div>
+      </div>
+      <script>
+        new QRCode(document.getElementById("qr-code"), { text: "${a.id}", width: 75, height: 75, colorDark: "#0f172a", colorLight: "#ffffff" });
+        setTimeout(function() { window.print(); }, 500);
+      <\/script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+}

@@ -287,7 +287,7 @@ select.finput{cursor:pointer}
 .di-chip.ok{background:var(--green-l);color:var(--green);border-color:#bbf7d0}
 
 /* ═══ TOAST ═══ */
-.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none}
+.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:1100;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none}
 .toast{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:10px;pointer-events:all;box-shadow:var(--shadow-lg);max-width:340px;animation:toastIn .25s cubic-bezier(.34,1.56,.64,1)}
 .toast.green{border-left:3px solid var(--green)}
 .toast.amber{border-left:3px solid var(--amber)}
@@ -394,8 +394,19 @@ select.finput{cursor:pointer}
 .login-sub{font-size:12px;color:var(--text3);margin-bottom:24px}
 .login-err{display:none;background:var(--red-l);color:var(--red);font-size:12px;padding:8px;border-radius:var(--r);margin-bottom:16px;font-weight:600}
 
+/* ═══ SPLASH SCREEN ═══ */
+#splash-screen { position:fixed; inset:0; background:var(--teal); z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity 0.5s ease, visibility 0.5s ease; }
+.splash-logo { display:flex; flex-direction:column; align-items:center; gap:16px; animation:pulse-splash 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.splash-icon { width:72px; height:72px; background:#fff; border-radius:20px; display:grid; place-items:center; box-shadow:0 10px 25px rgba(0,0,0,0.2); }
+.splash-icon svg { width:36px; height:36px; stroke:var(--teal); fill:none; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+.splash-text { font-size:32px; font-weight:800; color:#fff; letter-spacing:1px; }
+.splash-loader { width:40px; height:4px; background:rgba(255,255,255,0.3); border-radius:2px; margin-top:30px; overflow:hidden; position:relative; }
+.splash-loader::after { content:''; position:absolute; left:0; top:0; height:100%; width:50%; background:#fff; border-radius:2px; animation:loading-slide 1s ease-in-out infinite alternate; }
+@keyframes pulse-splash { 0%, 100% { transform:scale(1); } 50% { transform:scale(1.05); } }
+@keyframes loading-slide { 0% { left:-50%; } 100% { left:100%; } }
+
 /* ═══ MODAL & TABS ═══ */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:200;backdrop-filter:blur(2px);align-items:center;justify-content:center}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:1000;backdrop-filter:blur(2px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex;animation:fadeIn .2s}
 .modal{background:var(--surface);width:100%;max-width:680px;border-radius:var(--r2);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:90vh;animation:modalIn .25s cubic-bezier(.34,1.56,.64,1)}
 @keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
