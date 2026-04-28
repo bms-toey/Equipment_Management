@@ -489,22 +489,75 @@ function openLoanDrawer(loanId) {
       <div style="background:#fff;padding:8px;border:1px solid var(--border);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.05)" id="loan-qrcode" title="QR Code ใบยืม"></div>
     </div>
     
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">ข้อมูลการยืม</div>
-    <div class="detail-row"><div class="detail-key">ผู้ยืม</div><div class="detail-val fw">${loan.borrower}</div></div>
-    <div class="detail-row"><div class="detail-key">แผนก</div><div class="detail-val">${loan.dept}</div></div>
-    <div class="detail-row"><div class="detail-key">วัตถุประสงค์</div><div class="detail-val">${loan.reason}</div></div>
-    <div class="detail-row"><div class="detail-key">วันยืม</div><div class="detail-val">${loan.loanDate}</div></div>
-    <div class="detail-row"><div class="detail-key">กำหนดคืน</div><div class="detail-val" style="${loan.status==='overdue'?'color:var(--red);font-weight:700':''}">${loan.due}${loan.status==='overdue'?' ⚠ เกินกำหนด':''}</div></div>
-    ${loan.note?`<div class="detail-row"><div class="detail-key">หมายเหตุ</div><div class="detail-val">${loan.note}</div></div>`:''}
-    
-    ${loan.hn?`
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">ข้อมูลผู้ป่วย</div>
-    <div class="detail-row"><div class="detail-key">HN.</div><div class="detail-val mid" style="font-weight:600">${loan.hn}</div></div>
-    <div class="detail-row"><div class="detail-key">สิทธิ์การรักษา</div><div class="detail-val">${loan.rights||'-'}</div></div>
-    <div class="detail-row"><div class="detail-key">Diagnosis (โรค)</div><div class="detail-val">${loan.dx||'-'}</div></div>
-    `:''}
+    <!-- ── Borrower card ── -->
+    <div style="background:var(--teal-ll);border:1px solid var(--teal-d);border-radius:var(--r2);padding:14px 16px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:40px;height:40px;border-radius:50%;background:var(--teal);display:grid;place-items:center;flex-shrink:0">
+          <svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" width="18" height="18"><circle cx="10" cy="6" r="4"/><path d="M2 18c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:15px;font-weight:700;color:var(--text);line-height:1.2">${loan.borrower}</div>
+          <div style="font-size:12px;color:var(--teal);margin-top:1px">
+            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="11" height="11" style="vertical-align:middle;margin-right:2px"><rect x="1" y="3" width="12" height="9" rx="2"/><path d="M4 3V2M10 3V2M1 7h12"/></svg>
+            แผนก ${loan.dept}
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#fff;border-radius:8px;padding:9px 12px;border:1px solid rgba(13,148,136,.2)">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">วันที่ยืม</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">
+            <svg viewBox="0 0 14 14" fill="none" stroke="var(--teal)" stroke-width="1.5" stroke-linecap="round" width="12" height="12" style="vertical-align:middle;margin-right:3px"><rect x="1" y="2" width="12" height="11" rx="2"/><path d="M1 6h12M4 1v2M10 1v2"/></svg>
+            ${loan.loanDate}
+          </div>
+        </div>
+        <div style="background:${loan.status==='overdue'?'#fef2f2':'#fff'};border-radius:8px;padding:9px 12px;border:1px solid ${loan.status==='overdue'?'#fca5a5':'rgba(13,148,136,.2)'}">
+          <div style="font-size:10px;font-weight:700;color:${loan.status==='overdue'?'var(--red)':'var(--text3)'};text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">กำหนดคืน</div>
+          <div style="font-size:13px;font-weight:600;color:${loan.status==='overdue'?'var(--red)':'var(--text)'}">
+            <svg viewBox="0 0 14 14" fill="none" stroke="${loan.status==='overdue'?'var(--red)':'var(--teal)'}" stroke-width="1.5" stroke-linecap="round" width="12" height="12" style="vertical-align:middle;margin-right:3px"><circle cx="7" cy="7" r="6"/><path d="M7 4v3.5l2.5 1.5"/></svg>
+            ${loan.due}${loan.status==='overdue'?' <span style="font-size:11px;background:var(--red);color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">เกินกำหนด</span>':''}
+          </div>
+        </div>
+      </div>
+    </div>
 
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">รายการอุปกรณ์ (${loan.items.length} รายการ)</div>
+    <!-- ── Purpose + Note ── -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;margin-bottom:10px">
+      <div style="display:flex;gap:9px;align-items:flex-start">
+        <svg viewBox="0 0 16 16" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round" width="15" height="15" style="margin-top:1px;flex-shrink:0"><path d="M2 4h12M2 8h8M2 12h5"/></svg>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">วัตถุประสงค์</div>
+          <div style="font-size:13px;color:var(--text);line-height:1.5">${loan.reason}</div>
+        </div>
+      </div>
+      ${loan.note?`
+      <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;gap:9px;align-items:flex-start">
+        <svg viewBox="0 0 16 16" fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-linecap="round" width="15" height="15" style="margin-top:1px;flex-shrink:0"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.4"/></svg>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">หมายเหตุ</div>
+          <div style="font-size:13px;color:var(--text);line-height:1.5">${loan.note}</div>
+        </div>
+      </div>`:''}
+    </div>
+
+    ${loan.hn?`
+    <!-- ── Patient info ── -->
+    <div style="background:var(--blue-l);border:1px solid #bfdbfe;border-radius:var(--r2);padding:12px 14px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+        <svg viewBox="0 0 16 16" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round" width="13" height="13" style="vertical-align:middle;margin-right:4px"><path d="M8 2v12M2 8h12"/></svg>
+        ข้อมูลผู้ป่วย
+      </div>
+      <div style="display:grid;grid-template-columns:80px 1fr;row-gap:5px;column-gap:10px">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);align-self:center">HN</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text);font-family:var(--m)">${loan.hn}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text3);align-self:center">สิทธิ์การรักษา</div>
+        <div style="font-size:13px;color:var(--text)">${loan.rights||'-'}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text3);align-self:center">Diagnosis</div>
+        <div style="font-size:13px;color:var(--text)">${loan.dx||'-'}</div>
+      </div>
+    </div>`:''}
+
+    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:4px 0 8px;letter-spacing:.05em;text-transform:uppercase">รายการอุปกรณ์ (${loan.items.length} รายการ)</div>
     <div style="display:flex;flex-direction:column;gap:8px">
     ${loan.items.map((item, idx) => {
         const a = DB.assets.find(x => x.id === item.allocId) || DB.assets.find(x => x.id === item.reqId) || {name:item.name, id:item.reqId};
