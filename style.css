@@ -44,8 +44,7 @@ html,body{height:100%;font-family:var(--f);font-size:14px;color:var(--text);back
 .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;box-shadow:2px 0 8px rgba(0,0,0,.04)}
 .logo-area{padding:18px 16px 14px;border-bottom:1px solid var(--border)}
 .logo-wrap{display:flex;align-items:center;gap:10px}
-.logo-icon{width:34px;height:34px;background:var(--teal);border-radius:10px;display:grid;place-items:center;flex-shrink:0}
-.logo-icon svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.sidebar-logo-img{width:38px;height:38px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.15))}
 .logo-text{}
 .logo-name{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.3px}
 .logo-sub{font-size:10px;color:var(--text3);font-family:var(--m);margin-top:1px}
@@ -388,8 +387,7 @@ select.finput{cursor:pointer}
 /* ═══ LOGIN OVERLAY ═══ */
 #login-overlay{position:fixed;inset:0;background:var(--surface2);z-index:9999;display:flex;align-items:center;justify-content:center}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:32px 24px;width:100%;max-width:360px;box-shadow:var(--shadow-lg);text-align:center}
-.login-card .logo-icon{width:48px;height:48px;border-radius:12px;margin:0 auto 16px;background:var(--teal);display:grid;place-items:center}
-.login-card .logo-icon svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round}
+.login-logo-img{width:100px;height:100px;object-fit:contain;margin:0 auto 12px;display:block;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.15))}
 .login-title{font-size:20px;font-weight:700;color:var(--text);margin-bottom:6px}
 .login-sub{font-size:12px;color:var(--text3);margin-bottom:24px}
 .login-err{display:none;background:var(--red-l);color:var(--red);font-size:12px;padding:8px;border-radius:var(--r);margin-bottom:16px;font-weight:600}
@@ -397,9 +395,7 @@ select.finput{cursor:pointer}
 /* ═══ SPLASH SCREEN ═══ */
 #splash-screen { position:fixed; inset:0; background:var(--teal); z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity 0.5s ease, visibility 0.5s ease; }
 .splash-logo { display:flex; flex-direction:column; align-items:center; gap:16px; animation:pulse-splash 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-.splash-icon { width:72px; height:72px; background:#fff; border-radius:20px; display:grid; place-items:center; box-shadow:0 10px 25px rgba(0,0,0,0.2); }
-.splash-icon svg { width:36px; height:36px; stroke:var(--teal); fill:none; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
-.splash-text { font-size:32px; font-weight:800; color:#fff; letter-spacing:1px; }
+.splash-img { width:160px; height:160px; object-fit:contain; filter:drop-shadow(0 8px 24px rgba(0,0,0,0.25)); }
 .splash-loader { width:40px; height:4px; background:rgba(255,255,255,0.3); border-radius:2px; margin-top:30px; overflow:hidden; position:relative; }
 .splash-loader::after { content:''; position:absolute; left:0; top:0; height:100%; width:50%; background:#fff; border-radius:2px; animation:loading-slide 1s ease-in-out infinite alternate; }
 @keyframes pulse-splash { 0%, 100% { transform:scale(1); } 50% { transform:scale(1.05); } }
