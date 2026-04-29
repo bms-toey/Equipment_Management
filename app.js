@@ -1,4 +1,4 @@
-﻿﻿/* ════════════════════════════════
+﻿﻿﻿﻿/* ════════════════════════════════
    CUSTOM POPUP SYSTEM
 ════════════════════════════════ */
 let _popupResolve = null;
@@ -3709,6 +3709,530 @@ function renderAuditLog() {
       </div>
       <div class="audit-hash" title="Immutable HASH">${l.hash||'0x2F8A1B9C'}</div>
     </div>`).join('');
+}
+
+/* ════════════════════════════════
+   REPORTS & ANALYTICS
+════════════════════════════════ */
+
+function renderAssetReport() {
+  const container = document.getElementById('asset-report-body');
+  if (!container) return;
+/* --- DYNAMIC REPORT ENGINE --- */
+
+  const assets = DB.assets.filter(a => a.status !== 'จำหน่าย/แทงจำหน่าย');
+  const totalValue = assets.reduce((sum, a) => sum + (a.price || 0), 0);
+function generateDynamicReport(module) {
+  const sel = document.getElementById(`report-sel-${module}`);
+  const container = document.getElementById(`report-container-${module}`);
+  if (!sel || !container) return;
+  
+  const statusCounts = assets.reduce((acc, a) => {
+    acc[a.status] = (acc[a.status] || 0) + 1;
+    return acc;
+  }, {});
+  const rType = sel.value;
+  let html = '';
+  
+  // 1. DYNAMIC ROUTING
+  switch (rType) {
+      case '1.1': html = renderReport_1_1(); break;
+      case '1.4': html = renderReport_1_4(); break;
+      case '1.17': html = renderReport_1_17(); break;
+      case '2.1': html = renderReport_2_1(); break;
+      case '3.1': html = renderReport_3_1(); break;
+      case '4.1': html = renderReport_4_1(); break;
+      case '5.1': html = renderReport_5_1(); break;
+      case 'HA':  
+          generateComplianceReport(); 
+          html = '<div style="padding:40px;text-align:center;color:var(--teal);font-weight:700;">สร้างรายงาน PDF (HA/JCI Compliance) เรียบร้อยแล้ว</div>'; 
+          break;
+      case 'BUDGET':
+          html = `<div id="dyn-budget-container"></div>`;
+          setTimeout(() => { 
+              document.getElementById('dyn-budget-container').innerHTML = document.getElementById('budget-panel-body')?.innerHTML || ''; 
+              renderBudgetPanel(); 
+              document.getElementById('dyn-budget-container').innerHTML = document.getElementById('budget-panel-body')?.innerHTML || '';
+          }, 50);
+          break;
+      default:
+          html = `<div style="padding:40px;text-align:center;color:var(--text3);">อยู่ระหว่างการพัฒนาโมดูลรายงาน (${rType}) ...<br>คุณสามารถใช้โค้ดตัวอย่างใน app.js เพื่อดึงข้อมูลมาแสดงผลได้อย่างง่ายดาย</div>`;
+  }
+  
+  container.innerHTML = html;
+}
+
+  const statusColors = {
+    'พร้อมใช้': 'var(--teal)',
+    'ยืมออก': 'var(--amber)',
+    'ซ่อม': 'var(--blue)',
+    'รอ Cal.': 'var(--red)',
+    'รอตรวจสอบ': 'var(--amber)',
+    'จอง/รอตรวจสอบ': 'var(--blue)',
+  };
+
+  let kpiHtml = `
+    <div class="kpi-row" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 20px;">
+      <div class="kpi teal"><div class="kpi-label">จำนวนอุปกรณ์ทั้งหมด</div><div class="kpi-value">${assets.length}</div><div class="kpi-meta">เครื่อง</div></div>
+      <div class="kpi blue"><div class="kpi-label">มูลค่ารวม</div><div class="kpi-value">${(totalValue / 1000000).toFixed(2)}M</div><div class="kpi-meta">บาท</div></div>
+      ${Object.entries(statusCounts).map(([status, count]) => `
+        <div class="kpi" style="--kpi-color: ${statusColors[status] || 'var(--gray)'}">
+          <div class="kpi-label">${status}</div>
+          <div class="kpi-value" style="color: var(--kpi-color)">${count}</div>
+          <div class="kpi-meta">${((count / assets.length) * 100).toFixed(1)}%</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  const currentYear = 2567; // สมมติปีปัจจุบัน
+  let tableHtml = `
+function buildGenericTable(tableId, headers, rows) {
+  if(!rows || rows.length === 0) return `<div style="padding:20px;text-align:center;color:var(--text3)">ไม่มีข้อมูล</div>`;
+  return `
+    <div style="overflow-x:auto;">
+      <table class="tbl" id="asset-report-table">
+        <thead>
+          <tr>
+            <th>รหัสครุภัณฑ์</th>
+            <th>ชื่ออุปกรณ์</th>
+            <th>ประเภท</th>
+            <th>แผนก</th>
+            <th>สถานะ</th>
+            <th style="text-align:center">อายุ (ปี)</th>
+            <th style="text-align:right">มูลค่า (บาท)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${assets.map(a => {
+            const age = currentYear - a.year;
+            const isOld = age >= a.depYears;
+            return `
+              <tr class="${isOld ? 'dep-alert' : ''}">
+                <td class="mid">${a.id}</td>
+                <td class="fw">${a.name}</td>
+                <td>${a.category}</td>
+                <td>${a.dept}</td>
+                <td><span class="badge" style="background-color:${statusColors[a.status] || 'var(--gray-d)'}; color:white;">${a.status}</span></td>
+                <td style="text-align:center; ${isOld ? 'color:var(--red); font-weight:700;' : ''}">${age}</td>
+                <td style="text-align:right; font-family:var(--m)">${(a.price || 0).toLocaleString()}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      <table class="tbl" id="table-report-${tableId.split('-')[0] || tableId}">
+        <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = kpiHtml + tableHtml;
+    </div>`;
+}
+
+function exportAssetReportExcel() {
+  exportTableToExcel('asset-report-table', 'MedTrack_Asset_Inventory_Report.csv');
+}
+
+/**
+ * Exports an HTML table to a CSV file.
+ * @param {string} tableId The ID of the table to export.
+ * @param {string} filename The desired filename for the CSV file.
+ */
+function exportTableToExcel(tableId, filename = 'export.csv') {
+  const table = document.getElementById(tableId);
+  if (!table) {
+    toast(`ไม่พบตาราง '${tableId}'`, 'red');
+    toast(`กรุณากด "ดูรายงาน" เพื่อสร้างตารางข้อมูลก่อนทำการ Export`, 'amber');
+    return;
+  }
+
+  let csv = [];
+  // Get headers
+  const headers = [];
+  table.querySelectorAll('thead th').forEach(header => {
+    headers.push(`"${header.textContent.trim().replace(/"/g, '""')}"`);
+  });
+  csv.push(headers.join(','));
+
+  // Get rows
+  table.querySelectorAll('tbody tr').forEach(row => {
+    const rowData = [];
+    row.querySelectorAll('td').forEach(cell => {
+      // Clean up cell content (remove badges, etc. if needed, but for now, just text)
+      let cellText = cell.textContent.trim().replace(/\s+/g, ' ');
+      rowData.push(`"${cellText.replace(/"/g, '""')}"`);
+    });
+    csv.push(rowData.join(','));
+  });
+
+  const csvString = csv.join('\n');
+  const blob = new Blob(["\ufeff", csvString], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  toast('Export to Excel สำเร็จ', 'teal');
+}
+
+function renderMaintenanceReport() {
+  const container = document.getElementById('maint-report-body');
+  if (!container) return;
+/* --- SAMPLE REPORT IMPLEMENTATIONS --- */
+
+  // 1. KPIs
+  const kpis = calcReliabilityKPIs();
+  const totalRepairs = DB.repairs.length;
+  const openRepairs = DB.repairs.filter(r => r.status !== 'ซ่อมเสร็จ').length;
+
+  let kpiHtml = `
+    <div class="kpi-row" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px;">
+      <div class="kpi teal"><div class="kpi-label">Uptime / Availability</div><div class="kpi-value">${kpis.availPct}%</div><div class="kpi-meta">เป้า ≥ 95%</div></div>
+      <div class="kpi blue"><div class="kpi-label">MTTR (ซ่อมเฉลี่ย)</div><div class="kpi-value">${kpis.mttrHrs} ชม.</div><div class="kpi-meta">เป้า ≤ 48 ชม.</div></div>
+      <div class="kpi amber"><div class="kpi-label">MTBF (เสียเฉลี่ย)</div><div class="kpi-value">${kpis.mtbfDays} วัน</div><div class="kpi-meta">ยิ่งสูงยิ่งดี</div></div>
+      <div class="kpi red"><div class="kpi-label">งานซ่อมทั้งหมด</div><div class="kpi-value">${totalRepairs}</div><div class="kpi-meta">${openRepairs} งานยังไม่ปิด</div></div>
+    </div>
+  `;
+
+  // 2. Top 10 Bad Actors
+  const repairCounts = DB.repairs.reduce((acc, repair) => {
+    acc[repair.devId] = (acc[repair.devId] || 0) + 1;
+    return acc;
+  }, {});
+
+  const sortedRepairs = Object.entries(repairCounts)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10);
+
+  let tableHtml = `
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text)">Top 10 อุปกรณ์ที่เสียบ่อยที่สุด (Bad Actors)</div>
+    <div style="overflow-x:auto;">
+      <table class="tbl" id="maint-report-table">
+        <thead>
+          <tr>
+            <th style="width:50px">อันดับ</th>
+            <th>รหัสครุภัณฑ์</th>
+            <th>ชื่ออุปกรณ์</th>
+            <th>แผนก</th>
+            <th style="text-align:center">จำนวนครั้งที่ซ่อม</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sortedRepairs.map(([devId, count], index) => {
+            const asset = DB.assets.find(a => a.id === devId) || { name: 'N/A', dept: 'N/A' };
+            return `
+              <tr>
+                <td class="mid">${index + 1}</td>
+                <td class="mid">${devId}</td>
+                <td class="fw">${asset.name}</td>
+                <td>${asset.dept}</td>
+                <td style="text-align:center; font-weight:700; color:var(--red); font-family:var(--m)">${count}</td>
+              </tr>
+            `;
+          }).join('')}
+          ${sortedRepairs.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">ยังไม่มีข้อมูลการซ่อม</td></tr>' : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = kpiHtml + tableHtml;
+// 1.1 การจำแนกประเภทเครื่องมือแพทย์ ตามรหัส สนย.
+function renderReport_1_1() {
+  const active = DB.assets.filter(a => a.status !== 'จำหน่าย/แทงจำหน่าย');
+  const bySny = {};
+  active.forEach(a => { const k = a.sny || 'ไม่ระบุ'; if(!bySny[k]) bySny[k] = {count:0, val:0}; bySny[k].count++; bySny[k].val += (a.price||0); });
+  const rows = Object.keys(bySny).sort().map(k => [k, bySny[k].count, bySny[k].val.toLocaleString()]);
+  return buildGenericTable('asset', ['รหัส สนย.', 'จำนวนเครื่อง', 'มูลค่ารวม (บาท)'], rows);
+}
+
+function exportMaintReportExcel() {
+  exportTableToExcel('maint-report-table', 'MedTrack_Maintenance_Report.csv');
+// 1.4 การจำแนก ตามอายุการใช้งาน
+function renderReport_1_4() {
+  const active = DB.assets.filter(a => a.status !== 'จำหน่าย/แทงจำหน่าย');
+  const groups = {'0-5 ปี':0, '5-10 ปี':0, '10-15 ปี':0, '15-20 ปี':0, '> 20 ปี':0};
+  const cy = 2567;
+  active.forEach(a => {
+      const age = cy - (a.year || cy);
+      if(age <= 5) groups['0-5 ปี']++;
+      else if(age <= 10) groups['5-10 ปี']++;
+      else if(age <= 15) groups['10-15 ปี']++;
+      else if(age <= 20) groups['15-20 ปี']++;
+      else groups['> 20 ปี']++;
+  });
+  const rows = Object.keys(groups).map(k => [k, groups[k] + ' เครื่อง']);
+  return buildGenericTable('asset', ['ช่วงอายุการใช้งาน', 'จำนวนเครื่อง'], rows);
+}
+
+function renderUtilizationReport() {
+  const container = document.getElementById('utilization-report-body');
+  if (!container) return;
+
+  // --- 1. KPIs ---
+  const totalLoans = DB.loans.length;
+  const loanedAssets = DB.assets.filter(a => a.status === 'ยืมออก').length;
+  const activeAssets = DB.assets.filter(a => a.status !== 'จำหน่าย/แทงจำหน่าย').length;
+  const utilizationRate = activeAssets > 0 ? (loanedAssets / activeAssets) * 100 : 0;
+  
+  // On-time return rate calculation (Simulated)
+  const returnedLoans = DB.loans.filter(l => l.status === 'returned');
+  // The data model lacks a 'returnedDate'. This is a mock calculation.
+  // A real implementation would compare returnedDate against dueTs.
+  const onTimeReturns = returnedLoans.filter(l => parseInt(l.id.split('-')[1]) % 2 === 0).length;
+  const onTimeRate = returnedLoans.length > 0 ? (onTimeReturns / returnedLoans.length) * 100 : 100;
+
+  let kpiHtml = `
+    <div class="kpi-row" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px;">
+      <div class="kpi teal"><div class="kpi-label">อัตราการใช้งานปัจจุบัน</div><div class="kpi-value">${utilizationRate.toFixed(1)}%</div><div class="kpi-meta">${loanedAssets} / ${activeAssets} เครื่องกำลังถูกยืม</div></div>
+      <div class="kpi blue"><div class="kpi-label">จำนวนการยืมทั้งหมด</div><div class="kpi-value">${totalLoans}</div><div class="kpi-meta">ครั้งในระบบ</div></div>
+      <div class="kpi amber"><div class="kpi-label">อัตราคืนตรงเวลา (จำลอง)</div><div class="kpi-value">${onTimeRate.toFixed(1)}%</div><div class="kpi-meta">จาก ${returnedLoans.length} รายการที่คืนแล้ว</div></div>
+    </div>
+  `;
+
+  // --- 2. Top 10 Borrowing Departments ---
+  const deptCounts = DB.loans.reduce((acc, loan) => {
+    acc[loan.dept] = (acc[loan.dept] || 0) + 1;
+    return acc;
+  }, {});
+
+  const sortedDepts = Object.entries(deptCounts)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10);
+
+  let tableHtml = `
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text)">Top 10 แผนกที่ยืมบ่อยที่สุด</div>
+    <div style="overflow-x:auto;">
+      <table class="tbl" id="utilization-report-table">
+        <thead>
+          <tr>
+            <th style="width:50px">อันดับ</th>
+            <th>แผนก</th>
+            <th style="text-align:center">จำนวนครั้งที่ยืม</th>
+            <th style="text-align:center">สัดส่วน</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sortedDepts.map(([dept, count], index) => {
+            const percentage = totalLoans > 0 ? (count / totalLoans) * 100 : 0;
+            return `
+              <tr>
+                <td class="mid">${index + 1}</td>
+                <td class="fw">${dept}</td>
+                <td style="text-align:center; font-weight:700; color:var(--blue); font-family:var(--m)">${count}</td>
+                <td style="text-align:center; font-size:12px; color:var(--text2)"><div style="display:flex; align-items:center; gap:8px; justify-content:center;"><span>${percentage.toFixed(1)}%</span><div style="width:100px; height:8px; background:var(--border); border-radius:4px; overflow:hidden;"><div style="width:${percentage}%; height:100%; background:var(--blue);"></div></div></div></td>
+              </tr>`;
+          }).join('')}
+          ${sortedDepts.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">ยังไม่มีข้อมูลการยืม-คืน</td></tr>' : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = kpiHtml + tableHtml;
+// 1.17 ลงทะเบียนทั้งหมด
+function renderReport_1_17() {
+  const rows = DB.assets.map(a => [a.id, a.name, a.category, a.dept, a.status, (a.price||0).toLocaleString()]);
+  return buildGenericTable('asset', ['รหัสเครื่อง', 'ชื่ออุปกรณ์', 'ชนิดครุภัณฑ์', 'แผนก', 'สถานะ', 'ราคา (บาท)'], rows);
+}
+
+function exportUtilizationReportExcel() {
+  exportTableToExcel('utilization-report-table', 'MedTrack_Utilization_Report.csv');
+// 2.1 สรุปจำนวนอะไหล่คงคลัง
+function renderReport_2_1() {
+  const rows = DB.spareParts.map(s => [s.id, s.name, s.category, `<strong style="color:${s.qty<=s.minQty?'var(--red)':'var(--text)'}">${s.qty}</strong> ${s.unit}`, s.location]);
+  return buildGenericTable('spare', ['รหัสอะไหล่', 'ชื่ออะไหล่', 'ประเภท', 'คงเหลือ', 'สถานที่เก็บ'], rows);
+}
+
+ระบบสรุปและรายงานผล อำนวยความสะดวกในเรื่องรายงานของแต่ละโมดูล ดังต่อไปนี้
+1. ระบบทะเบียนครุภัณฑ์เครื่องมือแพทย์
+2. ระบบงานซ่อมบำรุง
+3. ระบบอะไหล่สำรอง
+4. ระบบงานจอง สำรอง ยืม-คืน
+5. ระบบงานบำรุงรักษาและสอบเทียบ
+
+คุณสมบัติของระบบบสรุปและรายงานผล
+1. ระบบทะเบียนครุภัณฑ์เครื่องมือแพทย์ 1.1 การจำแนกประเภทเครื่องมือแพทย์ ตามรหัส สนย.
+1.2 การจำแนกประเภทเครื่องมือแพทย์ ตามประเภทเครื่อง (ชนิดครุภัณฑ์)
+1.3 การจำแนกประเภทเครื่องมือแพทย์ ตามยี่ห้อ / รุ่น
+1.4 การจำแนก ตามอายุการใช้งาน แยกเป็น 0 - 5 ปี , มากกว่า 5 – 10ปี , มากกว่า 10 ปี - 15, มากกว่า 15 ปี - 20 และ มากกว่า 20 ปี
+1.5 รายการปริมาณเครื่องมือแพทย์แยกตามชนิด
+1.6 การจำแนกประเภทเครื่องมือแพทย์ ตามแผนก
+1.7 การจำแนกประเภทเครื่องมือแพทย์ ตามประเภทเงินจัดซื้อ
+1.8 การจำแนกประเภทเครื่องมือแพทย์ ตามบริษัทผู้จัดจำหน่าย
+1.9 แสดงรายการเครื่องมือแพทย์ที่เหลืออายุการใช้งาน ตามจำนวนปีที่คิดค่าเสื่อมราคา
+      1.9.1 แยกตามชนิดครุภัณฑ์
+      1.9.2 แยกตามรายครุภัณฑ์
+1.10 รายละเอียดครุภัณฑ์ทางการแพทย์ตามช่วงมูลค่า (ราคา)
+1.11 รายละเอียดครุภัณฑ์ทางการแพทย์ที่แทงชำรุด
+1.12 แสดงรายการจัดอันดับเครื่องมือแพทย์มูลค่าสูง
+1.13 การจำแนก ตามอายุการใช้งาน แยกเป็น 0 - น้อยกว่า 10 ปี ตั้งแต่ 10 ปี – น้อยกว่า 20ปี ตั้งแต่ 20 ปี - น้อยกว่า 30 ปี ตั้งแต่ 30 ปีขึ้นไป
+1.14 สรุปมูลค่าเครื่องมือแพทย์ แยกตามชนิดครุภัณฑ์ ยี่ห้อ รุ่น และแผนก
+1.15 แสดงค่าเสื่อมราคาเครื่องมือแพทย์
+1.16 รายการเครื่องมือแพทย์ที่ยังไม่มีเลขครุภัณฑ์
+1.17 รายการเครื่องมือแพทย์ที่ลงทะเบียนไว้ในระบบทั้งหมด
+
+2. ระบบทะเบียนอะไหล่สำรอง
+2.1 สรุปจำนวนอะไหล่คงคลัง
+2.2 สรุปมูลค่าอะไหล่คงคลัง
+2.3 สรุปจำนวนการเบิกอะไหล่รายเดือน
+2.4 สรุปจำนวนการเบิกอะไหล่รายครุภัณฑ์
+2.5 แสดงรายละเอียดของการเบิกอะไหล่ตามชนิดอะไหล่
+2.6 แสดงจำนวนการเบิกอะไหล่ ในช่วงเวลาที่กำหนด
+2.7 รายการเปรียบเทียบราคาอะไหล่ แยกตามชนิดอะไหล่ โดยเรียงตามบริษัท และราคาจัดซื้อ
+
+3. ระบบงานซ่อมเครื่องมือแพทย์
+3.1 จำนวนงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกเป็นรายเดือน
+3.2 จำนวนงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกตามแผนกและชนิดครุภัณฑ์
+3.3 จำนวนงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกตามผู้รับผิดชอบงานซ่อม
+3.4 จำนวนงานซ่อมคงค้างรายบุคคล โดยแยกตามแผนกและชนิดครุภัณฑ์
+3.5 จำนวนประเภทงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกตามผู้รับผิดชอบงานซ่อม
+3.6 รายงานความก้าวหน้างานซ่อมเครื่องมือแพทย์ คงค้าง กรณีซ่อมภายในทั้งหมด โดยแยกตามผู้รับผิดชอบงานซ่อม
+3.7 รายงานความก้าวหน้างานซ่อมเครื่องมือแพทย์ คงค้าง กรณีซ่อมภายนอกทั้งหมด โดยแยกตามผู้รับผิดชอบงานซ่อม
+3.8 รายงานระยะเวลาการซ่อม โดยแยกตามประเภทการซ่อม (เฉพาะงานซ่อมเสร็จและปิดงานแล้วเท่านั้น)
+3.9 รายงานระยะเวลาการซ่อมเฉลี่ย โดยแยกตามผู้รับผิดชอบงานซ่อม (เฉพาะงานซ่อมเสร็จ)
+3.10 รายงานระยะเวลาการซ่อมภายนอกแล้วเสร็จเฉลี่ย โดยแยกตามบริษัทและชนิดครุภัณฑ์ (เฉพาะงานซ่อมเสร็จ)
+3.11 รายงานค่าใช้จ่ายในการซ่อม และ Save Cost (เฉพาะงานซ่อมเสร็จ)
+3.12 ประหยัดค่าใช้จ่ายจากการส่งซ่อมภายนอก (เฉพาะงานซ่อมเสร็จ)
+3.13 ประหยัดค่าใช้จ่ายจากการส่งซ่อมภายใน (เฉพาะงานซ่อมเสร็จ)
+3.14 จำนวนงานและค่าใช้จ่ายในการซ่อมเครื่องมือแพทย์ แยกรายเดือน(เฉพาะงานซ่อมเสร็จ)
+3.15 จำนวนงานซ่อมเครื่องมือแพทย์ โดยแยกตามชนิดครุภัณฑ์
+3.16 จำนวนงานซ่อมเครื่องมือแพทย์ โดยแยกตามชนิดครุภัณฑ์ (เฉพาะงานนอกเวลาราชการ)
+3.17 จำนวนงานซ่อม แยกตามแผนก
+3.18 จำนวนงานซ่อมด่วน โดยแยกตามชนิดครุภัณฑ์
+3.19 จำนวนงานซ่อมด่วน แยกตามแผนก
+3.20 จำนวนงานซ่อมด่วนทั้งหมด โดยแยกตามผู้รับผิดชอบงานซ่อม
+3.21 จำนวนงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกตามชนิดครุภัณฑ์และสาเหตุการเสีย
+3.22 จำนวนงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกตามแผนกและสาเหตุการเสีย
+3.23 จำนวนงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกตามส่วนประกอบที่ชำรุดและชนิดครุภัณฑ์(แล้วเสร็จ)
+3.24 จำนวนประเภทงานซ่อม เครื่องมือแพทย์ทั้งหมด โดยแยกตามแผนกและสาเหตุการเสีย(แล้วเสร็จ)
+3.25 จำนวนงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกตามชนิดครุภัณฑ์และประเภทการซ่อม(แล้วเสร็จ)
+3.26 จำนวนงานซ่อมเครื่องมือแพทย์ทั้งหมด โดยแยกตามผู้รับผิดชอบและระยะเวลาแล้วเสร็จ
+3.27 รายงานผลปริมาณเครื่องมือแพทย์ที่ส่งซ่อม แยกตามประเภทเครื่อง
+3.28 รายงานสรุปประเภทการซ่อมแยกตามชนิดครุภัณฑ์และตามสาเหตุการเสีย (ซ่อมแล้วเสร็จ)
+3.29 จำนวนงานซ่อมเครื่องมือแพทย์ รายบุคคล ตามวันที่ต้องการ พร้อมแสดงรายละเอียด
+
+4. ระบบงานสำรองและยืม – คืนเครื่องมือแพทย์
+4.1 จำนวนเครื่องมือแพทย์สำรองที่ถูกยืมทั้งหมด โดยแยก ตามแผนก/หน่วยงาน และตามชนิดครุภัณฑ์ (Real Time)
+4.2 สถิติรวมการยืมเครื่องมือแพทย์สำรองทั้งหมด โดยแยก ตามแผนก/หน่วยงาน และตามชนิดครุภัณฑ์
+4.3 สถิติการยืมเครื่องมือแพทย์สำรองทั้งหมด โดยแยกตามชนิดครุภัณฑ์ (เรียงลำดับจากมากไปน้อย)
+4.4 สถิติความเพียงพอในการใช้งานเครื่องมือแพทย์สำรองทั้งหมด โดยแยกเป็นรายเดือน
+4.5 สถิติความเพียงพอในการใช้งานเครื่องมือแพทย์สำรองทั้งหมด โดยแยกตามชนิดครุภัณฑ์
+4.6 สถานะและจำนวนการเปลี่ยน Circuit (Real Time)
+4.7 สถิติการเปลี่ยน Circuit
+4.8 สถิติการเปลี่ยน Circuit แยกรายบุคคล
+4.9 สถิติการให้ยืมเครื่องช่วยหายใจ แยกรายบุคคล
+4.10 สรุปการปฏิบัติงานให้ยืมเครื่องช่วยหายใจ ในเวลา-นอกเวลาราชการ
+4.11 สรุปการปฏิบัติงานการเปลี่ยน Circuit ในเวลา-นอกเวลาราชการ
+
+5. ระบบงานบำรุงรักษาและเทียบมาตรฐาน (IPM)
+5.1 จำนวนครั้งของเครื่องมือแพทย์ที่ได้รับการตรวจสอบและบำรุงรักษา (IPM) ทั้งหมดตามแผน (ร้อยละ)
+5.1.1 แยกตามระดับความเสี่ยง (สูง กลาง ต่ำ)
+5.1.2 แยกตามแผนก/หน่วยงาน และตามชนิดครุภัณฑ์
+5.1.3 แยกตามรูปแบบการทำ IPM
+5.2 จำนวนเครื่องมือแพทย์ที่ผ่านเกณฑ์การตรวจสอบและบำรุงรักษา (IPM) ทั้งหมดตามแผน (ร้อยละ)
+5.2.1 แยกตามระดับความเสี่ยง (H M L)
+5.2.2 แยกตามแผนก/หน่วยงาน และตามชนิดครุภัณฑ์
+5.2.3 แยกตามรูปแบบการทำ IPM
+5.3 จำนวนเครื่องมือแพทย์ที่ส่งซ่อมหลังจากการตรวจสอบและบำรุงรักษา(IPM)แล้ว ภายในระยะเวลา 3 เดือน (ตามชนิดครุภัณฑ์)
+5.4 จำนวนเครื่องมือแพทย์ที่ส่งซ่อมหลังจากการตรวจสอบและบำรุงรักษา(IPM)แล้ว ภายในระยะเวลา 3 เดือน (แสดงรายละเอียด)
+5.3 สรุปจำนวนครั้งของแต่ละชนิดการทำ IPM (ร้อยละ)function renderFinancialReport() {
+  const container = document.getElementById('finance-cost-report-body');
+  if (!container) return;
+
+  // --- 1. Calculate Costs ---
+  let totalCost = 0;
+  let inHouseCost = 0;
+  let outsourceCost = 0;
+  const costData = [];
+
+// 3.1 งานซ่อมแยกรายเดือน
+function renderReport_3_1() {
+  const byMonth = {};
+  DB.repairs.forEach(r => {
+    const c = r.cost || 0;
+    if (c > 0 || r.status === 'ซ่อมเสร็จ') {
+      totalCost += c;
+      if (r.ext) outsourceCost += c;
+      else inHouseCost += c;
+      const m = (r.date || '').split(' ')[1] || 'ไม่ระบุ';
+      if(!byMonth[m]) byMonth[m] = {total:0, done:0, cost:0};
+      byMonth[m].total++;
+      if(r.status === 'ซ่อมเสร็จ') { byMonth[m].done++; byMonth[m].cost += (r.cost||0); }
+  });
+  const rows = Object.keys(byMonth).map(m => [m, byMonth[m].total, byMonth[m].done, byMonth[m].cost.toLocaleString()]);
+  return buildGenericTable('maint', ['เดือน', 'จำนวนแจ้งซ่อม', 'ซ่อมเสร็จแล้ว', 'ค่าใช้จ่ายรวม (บาท)'], rows);
+}
+
+      const asset = DB.assets.find(a => a.id === r.devId) || { dept: 'N/A' };
+      costData.push({
+        id: r.id, devId: r.devId, device: r.device, dept: asset.dept,
+        type: r.ext ? 'ซ่อมภายนอก' : 'ซ่อมภายใน', cost: c
+// 4.1 เครื่องมือแพทย์สำรองที่ถูกยืมทั้งหมด
+function renderReport_4_1() {
+  const activeLoans = DB.loans.filter(l => l.status === 'loaned' || l.status === 'overdue' || l.status === 'calexp');
+  const rows = [];
+  activeLoans.forEach(l => {
+      l.items.forEach(i => {
+          rows.push([i.allocId, i.name, l.dept, l.borrower, l.loanDate, l.due]);
+      });
+    }
+  });
+
+  const inHousePct = totalCost > 0 ? ((inHouseCost / totalCost) * 100).toFixed(1) : 0;
+  const outsourcePct = totalCost > 0 ? ((outsourceCost / totalCost) * 100).toFixed(1) : 0;
+
+  // --- 2. Build HTML ---
+  let kpiHtml = `
+    <div class="kpi-row" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 20px; margin-top: 0;">
+      <div class="kpi blue"><div class="kpi-label">ค่าใช้จ่ายซ่อมบำรุงรวม (CM)</div><div class="kpi-value">${totalCost.toLocaleString()}</div><div class="kpi-meta">บาท (ประวัติทั้งหมด)</div></div>
+      <div class="kpi teal"><div class="kpi-label">ซ่อมภายใน (In-house)</div><div class="kpi-value">${inHouseCost.toLocaleString()}</div><div class="kpi-meta">คิดเป็น ${inHousePct}% ของค่าใช้จ่ายรวม</div><div class="kpi-bar"><div class="kpi-fill" style="width:${inHousePct}%;background:var(--teal)"></div></div></div>
+      <div class="kpi amber"><div class="kpi-label">ส่งซ่อมภายนอก (Outsource)</div><div class="kpi-value">${outsourceCost.toLocaleString()}</div><div class="kpi-meta">คิดเป็น ${outsourcePct}% ของค่าใช้จ่ายรวม</div><div class="kpi-bar"><div class="kpi-fill" style="width:${outsourcePct}%;background:var(--amber)"></div></div></div>
+    </div>
+  `;
+
+  let tableHtml = `
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text)">รายละเอียดงานซ่อมที่มีค่าใช้จ่าย</div>
+    <div style="overflow-x:auto;">
+      <table class="tbl" id="finance-cost-table">
+        <thead><tr><th>ใบแจ้งซ่อม</th><th>อุปกรณ์</th><th>แผนก</th><th style="text-align:center">ประเภท</th><th style="text-align:right">ค่าใช้จ่าย (บาท)</th></tr></thead>
+        <tbody>
+          ${costData.map(r => `
+            <tr>
+              <td class="mid">${r.id}</td><td><div class="fw">${r.device}</div><div style="font-size:11px;color:var(--text3)">${r.devId}</div></td>
+              <td>${r.dept}</td><td style="text-align:center"><span class="badge ${r.type === 'ซ่อมภายใน' ? 'teal' : 'amber'}">${r.type}</span></td>
+              <td style="text-align:right; font-weight:700; font-family:var(--m)">${r.cost.toLocaleString()}</td>
+            </tr>`).join('')}
+          ${costData.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">ไม่มีข้อมูลงานซ่อม</td></tr>' : ''}
+        </tbody>
+      </table>
+    </div>`;
+
+  container.innerHTML = kpiHtml + tableHtml;
+  return buildGenericTable('loan', ['รหัสเครื่อง', 'ชื่ออุปกรณ์', 'แผนกที่ยืม', 'ผู้ยืม', 'วันที่ยืม', 'กำหนดคืน'], rows);
+}
+
+function exportFinancialReportExcel() {
+  exportTableToExcel('finance-cost-table', 'MedTrack_Financial_Cost_Report.csv');
+// 5.1 จำนวนครั้งของเครื่องมือแพทย์ที่ได้รับการตรวจสอบบำรุงรักษา (IPM) ตามแผน
+function renderReport_5_1() {
+  const wos = DB.pmList.filter(p => p.kind === 'pm');
+  const done = wos.filter(p => p.status === 'เสร็จสิ้น').length;
+  const pct = wos.length ? ((done/wos.length)*100).toFixed(1) : 0;
+  
+  let html = `<div class="kpi-row" style="margin-bottom:16px;">
+      <div class="kpi blue"><div class="kpi-label">แผน PM ทั้งหมด</div><div class="kpi-value">${wos.length}</div><div class="kpi-meta">รายการ</div></div>
+      <div class="kpi teal"><div class="kpi-label">ทำเสร็จสิ้นแล้ว</div><div class="kpi-value">${done}</div><div class="kpi-meta">รายการ</div></div>
+      <div class="kpi ${pct>=80?'green':'amber'}"><div class="kpi-label">คิดเป็นร้อยละ</div><div class="kpi-value">${pct}%</div><div class="kpi-meta">จากแผนทั้งหมด</div></div>
+  </div>`;
+  
+  const rows = wos.map(p => [p.id, p.devId, p.device, p.due, p.status, p.result||'-']);
+  html += buildGenericTable('qa', ['Work Order', 'รหัสเครื่อง', 'อุปกรณ์', 'กำหนดการ', 'สถานะ', 'ผลการตรวจสอบ'], rows);
+  return html;
 }
 
 /* ════════════════════════════════

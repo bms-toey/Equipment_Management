@@ -552,55 +552,125 @@
 
   <!-- ─── REPORTS ─── -->
   <div class="page" id="page-reports">
-    <div class="kpi-row" style="grid-template-columns:repeat(4,1fr)">
-      <div class="kpi teal" id="kpi-uptime-box"><div class="kpi-label">Uptime เฉลี่ย</div><div class="kpi-value">—</div><div class="kpi-meta">กำลังคำนวณ...</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%;background:var(--teal)"></div></div></div>
-      <div class="kpi amber"><div class="kpi-label">คืนตรงเวลา</div><div class="kpi-value">87%</div><div class="kpi-meta">เป้า ≥ 95% ✗</div><div class="kpi-bar"><div class="kpi-fill" style="width:87%;background:var(--amber)"></div></div></div>
-      <div class="kpi blue" id="kpi-mttr-box"><div class="kpi-label">MTTR เฉลี่ย</div><div class="kpi-value">—</div><div class="kpi-meta">กำลังคำนวณ...</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%;background:var(--blue)"></div></div></div>
-      <div class="kpi red"><div class="kpi-label">Cal. compliance</div><div class="kpi-value">94.2%</div><div class="kpi-meta">เป้า 100%</div><div class="kpi-bar"><div class="kpi-fill" style="width:94%;background:var(--red)"></div></div></div>
-    </div>
-    <div class="g2">
-      <div class="panel"><div class="panel-head"><div class="panel-title">แนวโน้ม PM & Cal. compliance (6 เดือน)</div></div><div class="panel-body" style="height:220px"><canvas id="chart-trend"></canvas></div></div>
-      <div class="panel"><div class="panel-head"><div class="panel-title">สาเหตุการซ่อม (Pareto)</div></div><div class="panel-body" style="height:220px"><canvas id="chart-pareto"></canvas></div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-head"><div class="panel-title">สถิติรายเดือน — เมษายน 2567</div></div>
-      <div class="panel-body">
-        <div class="stat-row"><div class="stat-label">PM completion rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:92%;background:var(--teal)"></div></div><div class="stat-value">91.7%</div></div>
-        <div class="stat-row"><div class="stat-label">Loan on-time rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:87%;background:var(--amber)"></div></div><div class="stat-value">87%</div></div>
-        <div class="stat-row"><div class="stat-label">Cal. valid rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:94%;background:var(--blue)"></div></div><div class="stat-value">94.2%</div></div>
-        <div class="stat-row"><div class="stat-label">Electrical safety pass rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:100%;background:var(--green)"></div></div><div class="stat-value">100%</div></div>
-        <div class="stat-row"><div class="stat-label">Damage during loan</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:4%;background:var(--red)"></div></div><div class="stat-value">1 รายการ</div></div>
-        <div class="stat-row"><div class="stat-label">อายุการใช้งานเฉลี่ย (Lifespan)</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:60%;background:var(--blue)"></div></div><div class="stat-value">4.2 ปี</div></div>
-      </div>
+    <!-- Sub-navigation Tabs -->
+    <div class="tabs-nav" style="margin-bottom: 20px; overflow-x: auto; white-space: nowrap; flex-wrap: nowrap; border-bottom: 1px solid var(--border);">
+      <div class="tab-btn active" onclick="switchReportTab('exec')" id="rep-tab-btn-exec">ภาพรวม (Dashboard)</div>
+      <div class="tab-btn" onclick="switchReportTab('asset')" id="rep-tab-btn-asset">สินทรัพย์ (Assets)</div>
+      <div class="tab-btn" onclick="switchReportTab('maint')" id="rep-tab-btn-maint">ซ่อมบำรุง (Maintenance)</div>
+      <div class="tab-btn" onclick="switchReportTab('loan')" id="rep-tab-btn-loan">ยืม-คืน (Utilization)</div>
+      <div class="tab-btn" onclick="switchReportTab('finance')" id="rep-tab-btn-finance">การเงิน (Financial)</div>
+      <div class="tab-btn" onclick="switchReportTab('qa')" id="rep-tab-btn-qa">คุณภาพ (QA & Safety)</div>
     </div>
 
-    <!-- ITEM 8: Annual Budget Planning -->
-    <div class="panel">
-      <div class="panel-head">
-        <div><div class="panel-title">แผนงบประมาณประจำปี (Annual Budget Planning)</div><div class="panel-subtitle">HA Thailand §3.3 — ประมาณการค่าใช้จ่าย PM, Cal และอะไหล่แยกตามแผนก</div></div>
-        <button class="btn btn-sm" onclick="renderBudgetPanel()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M2 8a6 6 0 1111.5 2M13 5v5h-5"/></svg> คำนวณใหม่</button>
+    <!-- 1. Executive Dashboard (Default) -->
+    <div class="tab-pane active" id="report-tab-exec" style="display: block;">
+      <div class="kpi-row" style="grid-template-columns:repeat(4,1fr); margin-top: 0;">
+        <div class="kpi teal" id="kpi-uptime-box"><div class="kpi-label">Uptime เฉลี่ย</div><div class="kpi-value">—</div><div class="kpi-meta">กำลังคำนวณ...</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%;background:var(--teal)"></div></div></div>
+        <div class="kpi amber"><div class="kpi-label">คืนตรงเวลา</div><div class="kpi-value">87%</div><div class="kpi-meta">เป้า ≥ 95% ✗</div><div class="kpi-bar"><div class="kpi-fill" style="width:87%;background:var(--amber)"></div></div></div>
+        <div class="kpi blue" id="kpi-mttr-box"><div class="kpi-label">MTTR เฉลี่ย</div><div class="kpi-value">—</div><div class="kpi-meta">กำลังคำนวณ...</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%;background:var(--blue)"></div></div></div>
+        <div class="kpi red"><div class="kpi-label">Cal. compliance</div><div class="kpi-value">94.2%</div><div class="kpi-meta">เป้า 100%</div><div class="kpi-bar"><div class="kpi-fill" style="width:94%;background:var(--red)"></div></div></div>
       </div>
-      <div class="panel-body" id="budget-panel-body">
-        <div style="text-align:center;padding:20px;color:var(--text3)">คลิก "คำนวณใหม่" เพื่อดูงบประมาณ</div>
+      <div class="g2">
+        <div class="panel"><div class="panel-head"><div class="panel-title">แนวโน้ม PM & Cal. compliance (6 เดือน)</div></div><div class="panel-body" style="height:220px"><canvas id="chart-trend"></canvas></div></div>
+        <div class="panel"><div class="panel-head"><div class="panel-title">สาเหตุการซ่อม (Pareto)</div></div><div class="panel-body" style="height:220px"><canvas id="chart-pareto"></canvas></div></div>
       </div>
-    </div>
-
-    <!-- ITEM 9: HA/JCI Compliance Report -->
-    <div class="panel">
-      <div class="panel-head">
-        <div><div class="panel-title">รายงานความสอดคล้องมาตรฐาน HA/JCI (Compliance Report)</div><div class="panel-subtitle">ISO 13485 / HA Thailand / JCI ME.7 — ออกรายงานเพื่อการตรวจรับรอง</div></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-sm" onclick="exportComplianceCSV()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M3 12h10M8 3v7M5 7l3 3 3-3"/></svg> Export CSV</button>
-          <button class="btn btn-teal btn-sm" onclick="generateComplianceReport()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M3 2h10v12H3z"/><path d="M6 5h4M6 8h4M6 11h2"/></svg> พิมพ์รายงาน</button>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div style="font-size:12px;color:var(--text2);line-height:1.8">
-          รายงานนี้ครอบคลุม: <strong>PM/Cal Completion Rate แยกตามแผนก</strong> · <strong>อัตรา Electrical Safety Pass</strong> · <strong>MTTR/Availability</strong> · <strong>สรุป Incident &amp; CAPA</strong> · <strong>FSCA/Recall Notices</strong><br>
-          เหมาะสำหรับการส่งให้คณะผู้ตรวจประเมิน HA Thailand, JCI, ISO 13485
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">สถิติรายเดือน — เมษายน 2567</div></div>
+        <div class="panel-body">
+          <div class="stat-row"><div class="stat-label">PM completion rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:92%;background:var(--teal)"></div></div><div class="stat-value">91.7%</div></div>
+          <div class="stat-row"><div class="stat-label">Loan on-time rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:87%;background:var(--amber)"></div></div><div class="stat-value">87%</div></div>
+          <div class="stat-row"><div class="stat-label">Cal. valid rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:94%;background:var(--blue)"></div></div><div class="stat-value">94.2%</div></div>
+          <div class="stat-row"><div class="stat-label">Electrical safety pass rate</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:100%;background:var(--green)"></div></div><div class="stat-value">100%</div></div>
+          <div class="stat-row"><div class="stat-label">Damage during loan</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:4%;background:var(--red)"></div></div><div class="stat-value">1 รายการ</div></div>
+          <div class="stat-row"><div class="stat-label">อายุการใช้งานเฉลี่ย (Lifespan)</div><div class="stat-bar-wrap"><div class="stat-bar" style="width:60%;background:var(--blue)"></div></div><div class="stat-value">4.2 ปี</div></div>
         </div>
       </div>
     </div>
+
+    <!-- 2. Assets Reports -->
+    <div class="tab-pane" id="report-tab-asset" style="display: none;">
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">รายงานสรุปทะเบียนเครื่องมือแพทย์ (Asset Inventory)</div><div class="panel-subtitle">แสดงจำนวนเครื่องมือ แยกตามแผนก ประเภท สถานะ และความเสี่ยง</div></div>
+          <button class="btn btn-sm" onclick="exportAssetReportExcel()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M14 11v3H2v-3M4 6l4 4 4-4M8 2v8"/></svg> Export Excel</button>
+        </div>
+        <div class="panel-body" id="asset-report-body">
+          <div style="text-align:center;padding:30px;color:var(--text3)">กำลังสร้างรายงาน...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Maintenance Reports -->
+    <div class="tab-pane" id="report-tab-maint" style="display: none;">
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">รายงานประวัติการแจ้งซ่อมและ PM (Maintenance History)</div><div class="panel-subtitle">สรุป MTTR, MTBF, และประสิทธิภาพการซ่อมบำรุง</div></div>
+          <button class="btn btn-sm" onclick="exportMaintReportExcel()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M14 11v3H2v-3M4 6l4 4 4-4M8 2v8"/></svg> Export Excel</button>
+        </div>
+        <div class="panel-body" id="maint-report-body">
+          <div style="text-align:center;padding:30px;color:var(--text3)">กำลังสร้างรายงาน...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Utilization & Loan Reports -->
+    <div class="tab-pane" id="report-tab-loan" style="display: none;">
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">รายงานสถิติการยืม-คืน (Utilization & Loan)</div><div class="panel-subtitle">วิเคราะห์ความคุ้มค่าของการลงทุน และการกระจายตัวการยืมของแต่ละแผนก</div></div>
+          <button class="btn btn-sm" onclick="exportUtilizationReportExcel()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M14 11v3H2v-3M4 6l4 4 4-4M8 2v8"/></svg> Export Excel</button>
+        </div>
+        <div class="panel-body" id="utilization-report-body">
+          <div style="text-align:center;padding:30px;color:var(--text3)">กำลังสร้างรายงาน...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Finance & Inventory -->
+    <div class="tab-pane" id="report-tab-finance" style="display: none;">
+      <!-- Maintenance Cost Report -->
+      <div class="panel" style="margin-bottom: 16px;">
+        <div class="panel-head">
+          <div><div class="panel-title">รายงานสรุปค่าใช้จ่ายงานซ่อมบำรุง (Maintenance Cost Analysis)</div><div class="panel-subtitle">เปรียบเทียบค่าใช้จ่ายจากการซ่อมเอง (In-house) และ การส่งซ่อมภายนอก (Outsource)</div></div>
+          <button class="btn btn-sm" onclick="exportFinancialReportExcel()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M14 11v3H2v-3M4 6l4 4 4-4M8 2v8"/></svg> Export Excel</button>
+        </div>
+        <div class="panel-body" id="finance-cost-report-body">
+          <div style="text-align:center;padding:30px;color:var(--text3)">กำลังสร้างรายงาน...</div>
+        </div>
+      </div>
+
+      <!-- ITEM 8: Annual Budget Planning -->
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">แผนงบประมาณประจำปี (Annual Budget Planning)</div><div class="panel-subtitle">HA Thailand §3.3 — ประมาณการค่าใช้จ่าย PM, Cal และอะไหล่แยกตามแผนก</div></div>
+          <button class="btn btn-sm" onclick="renderBudgetPanel()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M2 8a6 6 0 1111.5 2M13 5v5h-5"/></svg> คำนวณใหม่</button>
+        </div>
+        <div class="panel-body" id="budget-panel-body">
+          <div style="text-align:center;padding:20px;color:var(--text3)">คลิก "คำนวณใหม่" เพื่อดูงบประมาณ</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. QA & Compliance -->
+    <div class="tab-pane" id="report-tab-qa" style="display: none;">
+      <!-- ITEM 9: HA/JCI Compliance Report -->
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">รายงานความสอดคล้องมาตรฐาน HA/JCI (Compliance Report)</div><div class="panel-subtitle">ISO 13485 / HA Thailand / JCI ME.7 — ออกรายงานเพื่อการตรวจรับรอง</div></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="exportComplianceCSV()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M3 12h10M8 3v7M5 7l3 3 3-3"/></svg> Export CSV</button>
+            <button class="btn btn-teal btn-sm" onclick="generateComplianceReport()"><svg viewBox="0 0 16 16" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><path d="M3 2h10v12H3z"/><path d="M6 5h4M6 8h4M6 11h2"/></svg> พิมพ์รายงาน</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div style="font-size:12px;color:var(--text2);line-height:1.8">
+            รายงานนี้ครอบคลุม: <strong>PM/Cal Completion Rate แยกตามแผนก</strong> · <strong>อัตรา Electrical Safety Pass</strong> · <strong>MTTR/Availability</strong> · <strong>สรุป Incident &amp; CAPA</strong> · <strong>FSCA/Recall Notices</strong><br>
+            เหมาะสำหรับการส่งให้คณะผู้ตรวจประเมิน HA Thailand, JCI, ISO 13485
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ─── INCIDENT & CAPA ─── -->
@@ -1667,5 +1737,34 @@
 
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script>
+  // ฟังก์ชันสำหรับจัดการการสลับแท็บในหน้ารายงาน
+  function switchReportTab(tabId) {
+    const tabs = ['exec', 'asset', 'maint', 'loan', 'finance', 'qa'];
+    tabs.forEach(t => {
+      const btn = document.getElementById('rep-tab-btn-' + t);
+      const pane = document.getElementById('report-tab-' + t);
+      if (btn) btn.classList.remove('active');
+      if (pane) { pane.classList.remove('active'); pane.style.display = 'none'; }
+    });
+    
+    const activeBtn = document.getElementById('rep-tab-btn-' + tabId);
+    const activePane = document.getElementById('report-tab-' + tabId);
+    if (activeBtn) activeBtn.classList.add('active');
+    if (activePane) { 
+        activePane.classList.add('active'); 
+        activePane.style.display = 'block'; 
+    }
+    
+    // Call renderer for specific tabs
+    if (tabId === 'asset' && typeof renderAssetReport === 'function') renderAssetReport();
+    if (tabId === 'maint' && typeof renderMaintenanceReport === 'function') renderMaintenanceReport();
+    if (tabId === 'loan' && typeof renderUtilizationReport === 'function') renderUtilizationReport();
+    if (tabId === 'finance') {
+        if (typeof renderFinancialReport === 'function') renderFinancialReport();
+        if (typeof renderBudgetPanel === 'function') renderBudgetPanel();
+    }
+  }
+</script>
 </body>
 </html>
