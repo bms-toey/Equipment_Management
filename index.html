@@ -521,12 +521,6 @@
         </table>
       </div>
     </div>
-
-    <!-- SLA Performance Panel -->
-    <div class="panel" id="contracts-sla-panel" style="display:none">
-      <div class="panel-head"><div class="panel-title" id="contracts-sla-title">SLA Performance</div></div>
-      <div class="panel-body" id="contracts-sla-body"></div>
-    </div>
   </div>
 
   <!-- ─── AUDIT ─── -->
@@ -1438,6 +1432,19 @@
   <div class="drawer-foot">
     <button class="btn" onclick="closeDrawer()">ยกเลิก</button>
     <button class="btn btn-teal" onclick="saveContract()">บันทึกสัญญา</button>
+  </div>
+</div>
+
+<!-- Contract Detail / SLA Drawer -->
+<div class="drawer" id="drawer-contract-sla">
+  <div class="drawer-head">
+    <div><div class="drawer-title" id="contracts-sla-title">SLA Performance</div><div class="drawer-sub" id="contracts-sla-sub">รายละเอียดสัญญาและประวัติการซ่อม</div></div>
+    <div class="drawer-close" onclick="closeDrawer()">×</div>
+  </div>
+  <div class="drawer-body" id="contracts-sla-body"></div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">ปิดหน้าต่าง</button>
+    <button class="btn btn-teal" id="btn-edit-contract-from-sla" onclick="">แก้ไขสัญญา</button>
   </div>
 </div>
 
