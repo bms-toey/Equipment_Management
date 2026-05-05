@@ -1,4 +1,4 @@
-﻿﻿﻿﻿/* ════════════════════════════════
+﻿﻿﻿﻿﻿﻿/* ════════════════════════════════
    CUSTOM POPUP SYSTEM
 ════════════════════════════════ */
 let _popupResolve = null;
@@ -349,6 +349,13 @@ function refreshDashboard() {
   document.getElementById('kpi-overdue-meta').textContent = active.length+' รายการยืมออกอยู่';
   document.getElementById('kpi-overdue-bar').style.width = Math.min(overdue.length/active.length*100,100)+'%';
   
+  const nowTime = new Date().getTime();
+  const overduePm = DB.pmList.filter(p => p.status === 'รอดำเนินการ' && thaiDateToISO(p.due) && new Date(thaiDateToISO(p.due)).getTime() < nowTime);
+  const kpiPmEl = document.getElementById('kpi-overdue-pm');
+  if (kpiPmEl) kpiPmEl.textContent = overduePm.length;
+  const kpiPmBar = document.getElementById('kpi-overdue-pm-bar');
+  if (kpiPmBar) kpiPmBar.style.width = Math.min((overduePm.length / Math.max(DB.pmList.length, 1)) * 100, 100) + '%';
+
   // Loan table
   const tb = document.getElementById('dash-loan-tbody');
   const show = DB.loans.filter(l=>l.status!=='returned').slice(0,5);
@@ -922,119 +929,196 @@ function exportAssetsExcel() {
 function openAssetDrawer(id) {
   const a = DB.assets.find(x=>x.id===id);
   if(!a) return;
-  document.getElementById('drawer-asset-title').textContent = a.name;
-  document.getElementById('drawer-asset-sub').textContent = a.id+' · '+a.serial;
+  document.getElementById('drawer-asset-title').textContent = 'ข้อมูลเครื่องมือแพทย์';
+  document.getElementById('drawer-asset-sub').textContent = 'Asset Profile';
   
   const loanHistory = DB.loans.filter(l=>l.items.some(i=>i.allocId===id || i.reqId===id)).slice(0,5);
   const repairHistory = DB.repairs.filter(r=>r.devId===id);
+  const currentYear = 2567;
+  const age = a.year ? currentYear - a.year : 0;
   
+  let statusHtml = '';
+  if(a.status==='พร้อมใช้') statusHtml = '<span class="badge green" style="font-size:13px;padding:4px 10px">✓ พร้อมใช้งาน</span>';
+  else if(a.status==='ยืมออก') statusHtml = '<span class="badge amber" style="font-size:13px;padding:4px 10px">ยืมออกอยู่</span>';
+  else if(a.status==='ซ่อม') statusHtml = '<span class="badge blue" style="font-size:13px;padding:4px 10px">🔧 ส่งซ่อม</span>';
+  else if(a.status==='รอตรวจสอบ') statusHtml = '<span class="badge amber" style="font-size:13px;padding:4px 10px">รอตรวจสอบ</span>';
+  else statusHtml = '<span class="badge gray" style="font-size:13px;padding:4px 10px">'+a.status+'</span>';
+
+  let riskHtml = '';
+  if(a.risk==='สูง') riskHtml = '<span class="badge red">ความเสี่ยง: สูง</span>';
+  else if(a.risk==='กลาง') riskHtml = '<span class="badge amber">ความเสี่ยง: กลาง</span>';
+  else if(a.risk==='ต่ำ') riskHtml = '<span class="badge teal">ความเสี่ยง: ต่ำ</span>';
+  
+  const priceFmt = a.price ? parseFloat(a.price).toLocaleString() + ' ฿' : '—';
+  const buyYearStr = a.year ? 'พ.ศ. ' + a.year : '—';
+  const isDecommissioned = a.status === 'จำหน่าย/แทงจำหน่าย';
+
+  document.getElementById('drawer-asset-body').style.padding = '0';
+  document.getElementById('drawer-asset-body').style.backgroundColor = '#f8fafc';
+  document.getElementById('drawer-asset').style.width = 'min(750px, 95vw)';
+
   document.getElementById('drawer-asset-body').innerHTML = `
-    <div style="display:flex;gap:12px;margin-bottom:16px;background:var(--surface2);padding:12px;border-radius:var(--r2);border:1px solid var(--border);align-items:center">
-      <div style="width:70px;height:70px;background:var(--surface);border:1px dashed var(--border2);border-radius:var(--r);display:grid;place-items:center;color:var(--text3);font-size:11px">No Image</div>
-      <div>
-        <div style="font-family:var(--m);font-size:18px;letter-spacing:2px;font-weight:700">||||||| ||||| |||||</div>
-        <div style="font-family:var(--m);font-size:11px;color:var(--text3)">${a.id}</div>
+    <div style="background:#fff; padding:20px; border-bottom:1px solid var(--border); display:flex; gap:20px; align-items:flex-start;">
+      <div style="width:90px; height:90px; background:var(--surface2); border:1px dashed var(--border); border-radius:12px; display:grid; place-items:center; flex-shrink:0;">
+        <svg viewBox="0 0 24 24" style="width:36px; height:36px; stroke:var(--border2); fill:none; stroke-width:1.5;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+          <div>
+            <div style="font-family:var(--mono); font-size:13px; color:var(--teal); font-weight:700; margin-bottom:4px;">${a.id}</div>
+            <div style="font-size:20px; font-weight:700; color:var(--text); line-height:1.3;">${a.name}</div>
+          </div>
+          <div>${statusHtml}</div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <span class="badge gray">${a.category||'ไม่ระบุหมวดหมู่'}</span>
+          ${riskHtml}
+          <span class="badge gray">อายุเครื่อง ${age} ปี</span>
+        </div>
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      ${a.status==='พร้อมใช้'?'<span class="badge green">พร้อมใช้งาน</span>':a.status==='ยืมออก'?'<span class="badge amber">ยืมออก</span>':'<span class="badge blue">ส่งซ่อม</span>'}
-      <span class="badge ${a.risk==='สูง'?'red':a.risk==='กลาง'?'amber':'teal'}">Risk: ${a.risk}</span>
-      <span class="badge gray">${a.category}</span>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; background:#fff; border-bottom:1px solid var(--border);">
+      <div style="padding:12px 20px; border-right:1px solid var(--border);">
+        <div style="font-size:11px; color:var(--text3); margin-bottom:2px; font-weight:600;">แผนก/หน่วยงาน</div>
+        <div style="font-size:14px; font-weight:700; color:var(--text);">${a.dept||'—'}</div>
+      </div>
+      <div style="padding:12px 20px; border-right:1px solid var(--border);">
+        <div style="font-size:11px; color:var(--text3); margin-bottom:2px; font-weight:600;">ยี่ห้อ / รุ่น</div>
+        <div style="font-size:14px; font-weight:700; color:var(--text);">${a.mfr||'—'} ${a.model||''}</div>
+      </div>
+      <div style="padding:12px 20px;">
+        <div style="font-size:11px; color:var(--text3); margin-bottom:2px; font-weight:600;">Serial Number</div>
+        <div style="font-family:var(--mono); font-size:14px; font-weight:700; color:var(--text);">${a.serial||'—'}</div>
+      </div>
     </div>
-    
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase">ข้อมูลอุปกรณ์</div>
-    <div class="detail-row"><div class="detail-key">ผู้ผลิต / รุ่น</div><div class="detail-val">${a.mfr} ${a.model||''}</div></div>
-    <div class="detail-row"><div class="detail-key">Serial Number</div><div class="detail-val mid">${a.serial||'—'}</div></div>
-    <div class="detail-row"><div class="detail-key">แผนก</div><div class="detail-val">${a.dept}</div></div>
-    <div class="detail-row"><div class="detail-key">รหัส สนย.</div><div class="detail-val mid">${a.sny||'—'}</div></div>
-    <div class="detail-row"><div class="detail-key">ที่มาการจัดซื้อ</div><div class="detail-val">${a.procurement||'—'}</div></div>
-    <div class="detail-row"><div class="detail-key">ผู้จัดจำหน่าย</div><div class="detail-val">${a.vendor||'—'}</div></div>
-    <div class="detail-row"><div class="detail-key">ราคาจัดซื้อ</div><div class="detail-val">${a.price?a.price.toLocaleString()+' ฿':'—'}</div></div>
-    <div class="detail-row"><div class="detail-key">ปีที่จัดซื้อ</div><div class="detail-val">${a.year?'พ.ศ. '+a.year+' (คำนวณอายุเสื่อม '+a.depYears+' ปี)':'—'}</div></div>
-    
-    ${a.accessories && a.accessories.length ? `
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">อุปกรณ์เสริม (Accessories)</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">${a.accessories.map(ac=>`<span class="tag">${ac}</span>`).join('')}</div>
-    `:''}
 
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">สถานะบำรุงรักษาและรอบการทำงาน</div>
-    <div class="detail-row"><div class="detail-key">รอบ PM (IPM)</div><div class="detail-val">${a.pmFreq?a.pmFreq+' เดือน':'—'}</div></div>
-    <div class="detail-row"><div class="detail-key">รอบ Calibrate</div><div class="detail-val">${a.calFreq?a.calFreq+' เดือน':'—'}</div></div>
-    <div class="detail-row"><div class="detail-key">รอบเปลี่ยนอะไหล่</div><div class="detail-val">${a.partsFreq||'—'}</div></div>
-    <div class="detail-row"><div class="detail-key">Cal. หมดอายุ</div><div class="detail-val" style="${a.cal.includes('เม.ย.')?'color:var(--red);font-weight:600':''}">${a.cal}</div></div>
-    <div class="detail-row"><div class="detail-key">PM ถัดไป</div><div class="detail-val">${a.pm}</div></div>
-    
-    ${loanHistory.length?`
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">ประวัติการยืม</div>
-    ${loanHistory.map(l=>`
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
-        <div><div style="font-weight:600;color:var(--text)">${l.borrower}</div><div style="color:var(--text3)">${l.dept} · ${l.loanDate}</div></div>
-        ${loanStatusBadge(l.status)}
-      </div>`).join('')}`:''}`;
+    <div class="tabs-nav" style="padding:0 20px; border-bottom:1px solid var(--border); background:#fff; gap:20px;">
+      <div class="tab-btn active" onclick="switchAssetTab('info')" id="asset-tab-btn-info" style="padding:16px 4px;font-size:14px">ข้อมูลรายละเอียด</div>
+      <div class="tab-btn" onclick="switchAssetTab('maint')" id="asset-tab-btn-maint" style="padding:16px 4px;font-size:14px">รอบบำรุงรักษา</div>
+      <div class="tab-btn" onclick="switchAssetTab('history')" id="asset-tab-btn-history" style="padding:16px 4px;font-size:14px">ประวัติใช้งาน (${loanHistory.length + repairHistory.length})</div>
+    </div>
+
+    <div style="padding:20px; min-height:calc(100vh - 360px);">
       
-  if(repairHistory.length) {
-    document.getElementById('drawer-asset-body').innerHTML += `
-      <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">ประวัติการซ่อม (Repair History)</div>
-      ${repairHistory.map(r=>`
-        <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
-          <div style="display:flex;justify-content:space-between"><span class="fw">${r.id}</span> <span>${r.date}</span></div>
-          <div style="color:var(--text2);margin-top:2px">อาการ: ${r.sym}</div>
-          <div style="color:var(--text3);font-size:11px;margin-top:2px">สถานะ: ${r.status} | Downtime: ${r.downtime}</div>
-        </div>`).join('')}`;
-  }
-  
-  const isDecommissioned = a.status === 'จำหน่าย/แทงจำหน่าย';
-  if (isDecommissioned) {
-    document.getElementById('drawer-asset-body').innerHTML += `
-      <div style="font-size:11px;font-weight:700;color:var(--red);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">บันทึกการปลดประจำการ</div>
-      <div class="detail-row"><div class="detail-key">วันที่ปลดประจำการ</div><div class="detail-val" style="color:var(--red);font-weight:600">${a.decommDate||'—'}</div></div>
-      <div class="detail-row"><div class="detail-key">เหตุผล</div><div class="detail-val">${a.decommReason||'—'}</div></div>
-      <div class="detail-row"><div class="detail-key">วิธีการจำหน่าย</div><div class="detail-val">${a.decommMethod||'—'}</div></div>
-      <div class="detail-row"><div class="detail-key">เลขที่คำสั่ง / เอกสาร</div><div class="detail-val mid">${a.decommDocRef||'—'}</div></div>
-      <div class="detail-row"><div class="detail-key">ผู้อนุมัติ</div><div class="detail-val">${a.decommApprover||'—'}</div></div>
-      <div class="detail-row"><div class="detail-key">มูลค่าซาก</div><div class="detail-val">${a.decommSalvage ? a.decommSalvage.toLocaleString()+' ฿' : '—'}</div></div>
-      ${a.decommNote ? `<div class="detail-row"><div class="detail-key">หมายเหตุ</div><div class="detail-val">${a.decommNote}</div></div>` : ''}
-    `;
-  }
-
-  // ISO 14971 risk score section
-  const riskScoreHtml = a.riskScore ? (() => {
-    const ri = riskInfo ? riskInfo(a.riskScore) : {level:a.riskLevel14971||'',color:'#64748b',bg:'#f8fafc'};
-    return `<div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">ISO 14971 Risk Assessment</div>
-      <div style="display:flex;gap:12px;align-items:center;background:${ri.bg};border:1px solid ${ri.color}40;border-radius:8px;padding:10px 14px">
-        <div style="text-align:center;min-width:60px">
-          <div style="font-size:30px;font-weight:800;color:${ri.color}">${a.riskScore}</div>
-          <div style="font-size:10px;color:${ri.color};font-weight:700">P=${a.riskP} x S=${a.riskS}</div>
+      <!-- TAB 1: INFO -->
+      <div class="tab-pane active" id="asset-tab-info" style="display:block;">
+        <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:var(--teal);fill:none;stroke-width:2;"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          ข้อมูลการจัดซื้อและทะเบียน
         </div>
-        <div><div style="font-weight:700;color:${ri.color}">${ri.level}</div>
-          <div style="font-size:11px;color:var(--text2)">${a.riskRationale||'ยังไม่มีหมายเหตุ'}</div>
-          <div style="font-size:10px;color:var(--text3)">ประเมินล่าสุด: ${a.riskDate||'—'}</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px;">
+          <div style="background:#fff; padding:16px; border-radius:8px; border:1px solid var(--border); box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+            <div style="color:var(--text3); font-size:11px; margin-bottom:4px; font-weight:600;">ราคาจัดซื้อ (บาท)</div>
+            <div style="font-size:15px; font-weight:700; color:var(--text);">${priceFmt}</div>
+          </div>
+          <div style="background:#fff; padding:16px; border-radius:8px; border:1px solid var(--border); box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+            <div style="color:var(--text3); font-size:11px; margin-bottom:4px; font-weight:600;">ปีที่จัดซื้อ / ได้มา</div>
+            <div style="font-size:15px; font-weight:700; color:var(--text);">${buyYearStr}</div>
+          </div>
+          <div style="background:#fff; padding:16px; border-radius:8px; border:1px solid var(--border); box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+            <div style="color:var(--text3); font-size:11px; margin-bottom:4px; font-weight:600;">บริษัทตัวแทนจำหน่าย (Vendor)</div>
+            <div style="font-size:15px; font-weight:700; color:var(--text);">${a.vendor||'—'}</div>
+          </div>
+          <div style="background:#fff; padding:16px; border-radius:8px; border:1px solid var(--border); box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+            <div style="color:var(--text3); font-size:11px; margin-bottom:4px; font-weight:600;">เลขทะเบียน อย. / รหัส สนย.</div>
+            <div style="font-size:15px; font-weight:700; color:var(--text);">${a.fda||'—'} <span style="color:var(--text3);font-weight:400;margin:0 4px;">/</span> ${a.sny||'—'}</div>
+          </div>
         </div>
-      </div>`;
-  })() : '';
 
-  // Cal Certs section
-  const calCertsHtml = (a.calCerts && a.calCerts.length) ? `
-    <div style="font-size:11px;font-weight:700;color:var(--text3);margin:16px 0 8px;letter-spacing:.05em;text-transform:uppercase">ประวัติ Cal Certificate</div>
-    ${a.calCerts.slice().reverse().slice(0,3).map(c=>`
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
-        <div><span class="mono" style="font-weight:700">${c.certNo}</span> <span style="color:var(--text3)">(${c.pmId})</span></div>
-        <div style="color:var(--text3)">${c.date}</div>
-      </div>`).join('')}
-  ` : '';
+        ${a.accessories && a.accessories.length ? `
+        <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:12px;">อุปกรณ์เสริม (Accessories)</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          ${a.accessories.map(ac=>`<span style="background:#fff; border:1px solid var(--border); padding:6px 14px; border-radius:20px; font-size:12px; font-weight:500; color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,0.02);">${ac}</span>`).join('')}
+        </div>` : ''}
+      </div>
 
-  if (riskScoreHtml || calCertsHtml) {
-    document.getElementById('drawer-asset-body').innerHTML += riskScoreHtml + calCertsHtml;
-  }
+      <!-- TAB 2: MAINT -->
+      <div class="tab-pane" id="asset-tab-maint" style="display:none;">
+        <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:var(--teal);fill:none;stroke-width:2;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          รอบบำรุงรักษาและสอบเทียบ
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
+          <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid var(--border); border-top:4px solid var(--teal); box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div style="font-weight:700; font-size:15px; color:var(--text);">Preventive Maint.</div>
+              <div style="font-size:12px; font-weight:600; color:var(--teal); background:var(--teal-l); padding:4px 10px; border-radius:12px;">รอบ ${a.pmFreq||6} เดือน</div>
+            </div>
+            <div style="font-size:12px; color:var(--text3); font-weight:600;">กำหนดการครั้งถัดไป</div>
+            <div style="font-size:16px; font-weight:700; color:var(--teal); margin-top:4px;">${a.pm||'—'}</div>
+          </div>
+          <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid var(--border); border-top:4px solid var(--blue); box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div style="font-weight:700; font-size:15px; color:var(--text);">Calibration</div>
+              <div style="font-size:12px; font-weight:600; color:var(--blue); background:var(--blue-l); padding:4px 10px; border-radius:12px;">รอบ ${a.calFreq||12} เดือน</div>
+            </div>
+            <div style="font-size:12px; color:var(--text3); font-weight:600;">กำหนดการครั้งถัดไป</div>
+            <div style="font-size:16px; font-weight:700; color:var(--blue); margin-top:4px;">${a.cal||'—'}</div>
+          </div>
+        </div>
+        
+        <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:var(--text);fill:none;stroke-width:2;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          สัญญาบริการ (Service Contract)
+        </div>
+        <div style="background:#fff; padding:24px; border-radius:8px; border:2px dashed var(--border); text-align:center;">
+          <div style="font-size:13px; font-weight:600; color:var(--text2); margin-bottom:4px;">ไม่พบข้อมูลสัญญาบริการ</div>
+          <div style="font-size:12px; color:var(--text3);">อุปกรณ์นี้ไม่ได้ผูกกับสัญญาบริการใดๆ ในระบบ</div>
+        </div>
+      </div>
+
+      <!-- TAB 3: HISTORY -->
+      <div class="tab-pane" id="asset-tab-history" style="display:none;">
+        ${repairHistory.length ? `
+          <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:var(--text);fill:none;stroke-width:2;"><path d="M10 2l4 4-8 8H2v-4z"/><path d="M10 6l-4 4"/></svg>
+            ประวัติการซ่อม (${repairHistory.length})
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:32px;">
+            ${repairHistory.map(r=>`
+              <div style="background:#fff; border:1px solid var(--border); padding:16px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+                <div>
+                  <div style="font-weight:700; font-size:14px; color:var(--text); margin-bottom:4px;">${r.id} <span style="font-weight:500; color:var(--text3); font-size:12px; margin-left:8px;">${r.date}</span></div>
+                  <div style="font-size:13px; color:var(--text2);">อาการ: ${r.sym}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="margin-bottom:6px;"><span class="badge ${r.status==='ซ่อมเสร็จ'?'green':r.status==='ส่งซ่อมภายนอก'?'amber':'blue'}">${r.status}</span></div>
+                  <div style="font-size:11px; color:var(--text3); font-weight:600;">Downtime: ${r.downtime||r.days||0} วัน</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<div style="padding:24px; text-align:center; color:var(--text3); font-size:13px; background:#fff; border:1px dashed var(--border); border-radius:8px; margin-bottom:32px;">ไม่มีประวัติการซ่อม</div>'}
+
+        ${loanHistory.length ? `
+          <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:var(--text);fill:none;stroke-width:2;"><path d="M3 8h10M10 5l3 3-3 3"/></svg>
+            ประวัติการยืมล่าสุด
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            ${loanHistory.map(l=>`
+              <div style="background:#fff; border:1px solid var(--border); padding:16px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+                <div>
+                  <div style="font-weight:700; font-size:14px; color:var(--text); margin-bottom:4px;">${l.borrower} <span style="font-weight:500; color:var(--text3); font-size:12px; margin-left:8px;">${l.dept}</span></div>
+                  <div style="font-size:12px; color:var(--text2);">วันที่ยืม: <span style="font-weight:600">${l.loanDate}</span></div>
+                </div>
+                ${loanStatusBadge(l.status)}
+              </div>
+            `).join('')}
+          </div>
+        ` : '<div style="padding:24px; text-align:center; color:var(--text3); font-size:13px; background:#fff; border:1px dashed var(--border); border-radius:8px;">ไม่มีประวัติการยืม</div>'}
+      </div>
+    </div>
+  `;
 
   document.getElementById('drawer-asset-foot').innerHTML = `
-    <button class="btn" onclick="closeDrawer()">ปิด</button>
-    ${!isDecommissioned ? `<button class="btn" style="border-color:var(--amber);color:var(--amber)" onclick="openRiskModal('${a.id}')">Risk Assessment</button>` : ''}
-    ${!isDecommissioned ? `<button class="btn btn-red" style="background:transparent;border-color:var(--red);color:var(--red)" onclick="decommissionAsset('${a.id}')">ปลดประจำการ</button>` : '<span class="badge red" style="align-self:center">ปลดประจำการแล้ว</span>'}
-    ${!isDecommissioned ? `<button class="btn btn-teal" style="margin-left:auto" onclick="openEditDeviceModal('${a.id}')">แก้ไขข้อมูล</button>` : ''}
-    ${a.status==='พร้อมใช้'?`<button class="btn btn-teal" onclick="closeDrawer();goto('newloan',document.getElementById('nav-newloan'))">+ บันทึกยืม</button>`:''}
+    <button class="btn" style="padding:10px 20px;" onclick="closeDrawer()">ปิดหน้าต่าง</button>
+    <button class="btn" style="padding:10px 20px; border-color:var(--border); color:var(--text2);" onclick="printAssetLabel('${a.id}')">🖨 พิมพ์ QR Code</button>
+    ${!isDecommissioned ? `<button class="btn" style="padding:10px 20px; color:var(--red); border-color:#fca5a5; background:var(--red-l);" onclick="closeDrawer(); decommissionAsset('${a.id}')">ปลดประจำการ</button>` : ''}
+    ${!isDecommissioned ? `<button class="btn btn-teal" style="padding:10px 24px; margin-left:auto;" onclick="openEditDeviceModal('${a.id}')">✎ แก้ไขข้อมูล</button>` : ''}
   `;
+
   openDrawer('drawer-asset');
 }
 
@@ -1287,7 +1371,30 @@ function submitDecommission() {
 function openRepairDrawer() {
   populateRepairDevices();
   document.getElementById('repair-cmid').value = previewDocId('repair');
+  clearRepairImage();
   openDrawer('drawer-repair');
+}
+
+function previewRepairImage(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('repair-image-preview').src = e.target.result;
+      document.getElementById('repair-image-preview-container').style.display = 'block';
+      document.getElementById('repair-image-label').innerText = input.files[0].name;
+    }
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function clearRepairImage(e) {
+  if (e) e.stopPropagation();
+  const input = document.getElementById('repair-image');
+  if (input) input.value = '';
+  const container = document.getElementById('repair-image-preview-container');
+  if (container) container.style.display = 'none';
+  const label = document.getElementById('repair-image-label');
+  if (label) label.innerText = 'คลิกเพื่อเลือกรูปภาพ หรือ ถ่ายภาพ';
 }
 
 function populateRepairDevices() {
@@ -1305,13 +1412,18 @@ function submitRepair() {
   const asset = DB.assets.find(a=>a.id===dev);
   if(asset) asset.status = 'ซ่อม';
   
+  const imgInput = document.getElementById('repair-image');
+  const hasImage = imgInput && imgInput.files && imgInput.files.length > 0;
+  const symDisplay = sym + (hasImage ? ' <span style="color:var(--teal);font-weight:600">[📸 มีภาพแนบ]</span>' : '');
+  const attachedImage = hasImage ? document.getElementById('repair-image-preview').src : null;
+
   const today = new Date();
   const thaiDate = today.getDate()+' เม.ย.';
   
   DB.repairs.unshift({
     id: cmId, devId: dev, device: asset?asset.name:'Unknown',
-    sym: sym, reporter: 'ผู้ใช้งานระบบ', date: thaiDate, days: 0,
-    tech: '', status: 'รอรับงาน', location: loc, ext: false, cost: 0, cause: '', parts: ''
+    sym: symDisplay, reporter: 'ผู้ใช้งานระบบ', date: thaiDate, days: 0,
+    tech: '', status: 'รอรับงาน', location: loc, ext: false, cost: 0, cause: '', parts: '', attachedImage: attachedImage
   });
   
   addAuditLog('CM',currentUserName(),'เปิดแจ้งซ่อม '+cmId,dev+' · '+sym.substring(0,50));
@@ -1411,6 +1523,13 @@ function openRepairManageDrawer(cmId) {
   document.getElementById('drm-progress').value = '';
   document.getElementById('drm-escalation').value = '';
   document.getElementById('drm-pin').value = '';
+
+  const imgSec = document.getElementById('drm-image-section');
+  const imgEl = document.getElementById('drm-attached-image');
+  if(imgSec && imgEl) {
+    if(r.attachedImage) { imgEl.src = r.attachedImage; imgSec.style.display = 'block'; }
+    else { imgSec.style.display = 'none'; imgEl.src = ''; }
+  }
 
   // Init parts list (support old string format for backward compat)
   _cmPartsTemp = Array.isArray(r.partsUsed) ? r.partsUsed.map(p=>({...p})) : [];
@@ -1758,13 +1877,31 @@ function collectPMChecklistData() {
   return results;
 }
 
+let pmFilterOverdue = false;
+function togglePMOverdue() {
+  pmFilterOverdue = !pmFilterOverdue;
+  const btn = document.getElementById('pm-filter-overdue');
+  if (btn) btn.style.background = pmFilterOverdue ? 'var(--red-l)' : 'transparent';
+  renderPMTable();
+}
+function gotoOverduePM() {
+  pmFilterOverdue = true;
+  const btn = document.getElementById('pm-filter-overdue');
+  if (btn) btn.style.background = 'var(--red-l)';
+  goto('pm', document.getElementById('nav-pm'));
+}
+
 /* ════════════════════════════════
    PM & REPAIR TABLES
 ════════════════════════════════ */
 function renderPMTable() {
   const tb = document.getElementById('pm-tbody');
   if(!tb) return;
-  const rows = DB.pmList.filter(p => p.kind === activePMKind);
+  let rows = DB.pmList.filter(p => p.kind === activePMKind);
+  if (pmFilterOverdue) {
+    const nowTime = new Date().getTime();
+    rows = rows.filter(p => p.status === 'รอดำเนินการ' && thaiDateToISO(p.due) && new Date(thaiDateToISO(p.due)).getTime() < nowTime);
+  }
   if (rows.length === 0) {
     tb.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">ไม่มีรายการ</td></tr>';
     return;
@@ -2053,7 +2190,7 @@ function updatePMTicket() {
     renderPMCalendar();
     toast('บันทึกและล็อกระเบียน '+p.id+' สำเร็จ (ลงนามโดย '+signedUser.name+')','teal');
   } else {
-    addAuditLog(p.kind==='cal'?'CAL':'PM', STATE.currentUser||'—', 'แก้ไขข้อมูล '+p.id+' (draft)', `สถานะ: ${p.status}`);
+    addAuditLog(p.kind==='cal'?'CAL':'PM', currentUserName(), 'แก้ไขข้อมูล '+p.id+' (draft)', `สถานะ: ${p.status}`);
     closeDrawer();
     renderPMTable();
     renderPMCalendar();
@@ -5074,10 +5211,96 @@ function applyRoleUI() {
 }
 
 /* ════════════════════════════════
+   PUBLIC REPAIR REQUEST (QR CODE)
+════════════════════════════════ */
+let _pubCMAssetId = null;
+
+function initPublicCM(devId) {
+  _pubCMAssetId = devId;
+  const overlay = document.getElementById('public-cm-overlay');
+  if(overlay) overlay.style.display = 'block';
+
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('splash-screen').style.display = 'none';
+
+  const asset = DB.assets.find(a => a.id === devId);
+  if (asset) {
+    document.getElementById('pub-cm-id').textContent = asset.id;
+    document.getElementById('pub-cm-name').textContent = asset.name;
+    document.getElementById('pub-cm-dept').textContent = 'สถานที่/แผนก: ' + (asset.dept || '-');
+  } else {
+    document.getElementById('pub-cm-id').textContent = devId;
+    document.getElementById('pub-cm-name').textContent = 'ไม่พบข้อมูลอุปกรณ์ในระบบ';
+    document.getElementById('pub-cm-name').style.color = 'var(--red)';
+    document.getElementById('pub-cm-dept').textContent = 'กรุณาตรวจสอบรหัส QR Code อีกครั้ง';
+    document.getElementById('pub-cm-reporter').disabled = true;
+    document.getElementById('pub-cm-contact').disabled = true;
+    document.getElementById('pub-cm-symptom').disabled = true;
+    document.querySelector('#public-cm-form .btn-teal').disabled = true;
+  }
+}
+
+function previewPubCMImage(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('pub-cm-image-preview').src = e.target.result;
+      document.getElementById('pub-cm-image-preview-container').style.display = 'block';
+      document.getElementById('pub-cm-image-label').innerText = input.files[0].name;
+    }
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function clearPubCMImage(e) {
+  if (e) e.stopPropagation();
+  const input = document.getElementById('pub-cm-image');
+  if (input) input.value = '';
+  const container = document.getElementById('pub-cm-image-preview-container');
+  if (container) container.style.display = 'none';
+  const label = document.getElementById('pub-cm-image-label');
+  if (label) label.innerText = 'แตะเพื่อถ่ายภาพ';
+}
+
+function submitPublicCM() {
+  const asset = DB.assets.find(a => a.id === _pubCMAssetId);
+  if (!asset) return;
+  const reporter = document.getElementById('pub-cm-reporter').value.trim();
+  const contact = document.getElementById('pub-cm-contact').value.trim();
+  const sym = document.getElementById('pub-cm-symptom').value.trim();
+  if (!reporter || !contact || !sym) { popAlert('กรุณากรอกข้อมูลผู้แจ้งซ่อม, เบอร์โทร/แผนก และอาการเสียให้ครบถ้วน'); return; }
+
+  const cmId = nextDocId('repair');
+  const today = new Date();
+  const thaiDate = today.getDate() + ' เม.ย.';
+  const imgInput = document.getElementById('pub-cm-image');
+  const hasImage = imgInput && imgInput.files && imgInput.files.length > 0;
+  const symDisplay = sym + (hasImage ? ' <span style="color:var(--teal);font-weight:600">[📸 มีภาพแนบ]</span>' : '');
+  const attachedImage = hasImage ? document.getElementById('pub-cm-image-preview').src : null;
+
+  asset.status = 'ซ่อม';
+  DB.repairs.unshift({ id: cmId, devId: asset.id, device: asset.name, sym: symDisplay, reporter: reporter + ' (' + contact + ')', date: thaiDate, days: 0, tech: '', status: 'รอรับงาน', location: asset.dept || 'รอระบุ', ext: false, cost: 0, cause: '', parts: '', attachedImage: attachedImage });
+  addAuditLog('CM', reporter, 'แจ้งซ่อมออนไลน์ (Public QR)', asset.id + ' · ' + sym.substring(0, 30));
+  saveDB();
+
+  document.getElementById('public-cm-form').style.display = 'none';
+  document.getElementById('public-cm-success').style.display = 'flex';
+  document.getElementById('pub-cm-ref').textContent = cmId;
+}
+
+/* ════════════════════════════════
    INIT
 ════════════════════════════════ */
 document.addEventListener('DOMContentLoaded',()=>{
   loadDB(); // Item 1: restore persisted data
+  
+  const urlParams = new URLSearchParams(window.location.search);
+  const publicDevice = urlParams.get('cm_device');
+  if (publicDevice) {
+    initPublicCM(publicDevice);
+    return; // หยุดกระบวนการโชว์หน้าล็อกอิน และโชว์หน้าแจ้งซ่อมสาธารณะแทน
+  }
+
   refreshSelectOptions();
   refreshDashboard();
   renderDeviceCards();
@@ -5596,6 +5819,9 @@ function printAssetLabel(id) {
   const a = DB.assets.find(x => x.id === id);
   if (!a) { toast('ไม่พบข้อมูลอุปกรณ์', 'red'); return; }
   
+  const currentUrl = window.location.origin + window.location.pathname;
+  const qrLink = currentUrl + '?cm_device=' + a.id;
+
   const printWindow = window.open('', '_blank', 'width=500,height=400');
   printWindow.document.write(`
     <!DOCTYPE html>
@@ -5625,7 +5851,7 @@ function printAssetLabel(id) {
         </div>
       </div>
       <script>
-        new QRCode(document.getElementById("qr-code"), { text: "${a.id}", width: 75, height: 75, colorDark: "#0f172a", colorLight: "#ffffff" });
+        new QRCode(document.getElementById("qr-code"), { text: "${qrLink}", width: 75, height: 75, colorDark: "#0f172a", colorLight: "#ffffff" });
         setTimeout(function() { window.print(); }, 500);
       <\/script>
     </body>
